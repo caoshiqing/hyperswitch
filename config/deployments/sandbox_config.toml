@@ -136,7 +136,7 @@ level = "DEBUG"
 log_format = "default"
 
 [log.file]
-enabled = false         # Toggle [true or false]
+enabled = true         # Toggle [true or false]
 path = "logs"           # specify the directory to create log files
 file_name = "debug.log" # base name for log files.
 # levels can be "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF"
@@ -146,15 +146,11 @@ level = "DEBUG"
 
 # Telemetry configuration for metrics and traces
 [log.telemetry]
-traces_enabled = false                                # boolean [true or false], whether traces are enabled
-metrics_enabled = false                               # boolean [true or false], whether metrics are enabled
-ignore_errors = false                                 # boolean [true or false], whether to ignore errors during traces or metrics pipeline setup
-sampling_rate = 0.1                                   # decimal rate between 0.0 - 1.0
-otel_exporter_otlp_endpoint = "http://localhost:4317" # endpoint to send metrics and traces to, can include port number
-otel_exporter_otlp_timeout = 5000                     # timeout (in milliseconds) for sending metrics and traces
-use_xray_generator = false                            # Set this to true for AWS X-ray compatible traces
-route_to_trace = ["*/confirm"]
-bg_metrics_collection_interval_in_secs = 15           # Interval for collecting the metrics in background thread
+traces_enabled = false
+metrics_enabled = false
+use_xray_generator = false
+bg_metrics_collection_interval_in_secs = 15
+
 
 [lock_settings]
 delay_between_retries_in_milliseconds = 500 # Delay between retries in milliseconds
