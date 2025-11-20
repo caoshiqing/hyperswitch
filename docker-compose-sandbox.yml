@@ -86,7 +86,7 @@ services:
         condition: service_healthy
     environment:
       - ENABLE_LOGGING=true
-      - SDK_ENV=local
+      - SDK_ENV=sandbox
       - ENV_LOGGING_URL=http://localhost:3103
       - ENV_BACKEND_URL=http://localhost:8080
     labels:
