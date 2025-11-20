@@ -9,7 +9,7 @@ networks:
 services:
   ### Application services
   hyperswitch-server:
-    image: hyperswitch-control-center:latest
+    image: hyperswitch-router:latest
     pull_policy: always
     command: /local/bin/router --config-path /local/config/deployments/sandbox_release.toml
     ports:
