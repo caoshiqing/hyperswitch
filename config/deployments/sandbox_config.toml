@@ -257,7 +257,7 @@ url = "http://localhost:5000" # URL of the encryption service
 
 # This section provides some secret values.
 [secrets]
-master_enc_key = "sample_key"            # Master Encryption key used to encrypt merchant wise encryption key. Should be 32-byte long.
+master_enc_key = "24c110f68fcaec4bc520b58e16e336f2a685a28a547f537359743cb11d9402eb"            # Master Encryption key used to encrypt merchant wise encryption key. Should be 32-byte long.
 admin_api_key = "test_admin"             # admin API key for admin authentication.
 jwt_secret = "secret"                    # JWT secret used for user authentication.
 
