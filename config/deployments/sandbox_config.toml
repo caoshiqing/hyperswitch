@@ -159,7 +159,7 @@ merchant_id_auth_enabled = false
 [master_database]
 username = "hyperswitch"      # DB Username
 password = "123456"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
-host = "localhost"        # DB Host
+host = "192.168.30.127"        # DB Host
 port = 5432               # DB Port
 dbname = "hyperswitch_db" # Name of Database
 pool_size = 5             # Number of connections to keep open
@@ -223,7 +223,7 @@ max_feed_count = 200
 [replica_database]
 username = "hyperswitch" # DB Username
 password = "123456"      # DB Password. Use base-64 encoded kms encrypted value here when kms is enabled
-host = "localhost"        # DB Host
+host = "192.168.30.127"        # DB Host
 port = 5432               # DB Port
 dbname = "hyperswitch_db" # Name of Database
 pool_size = 5             # Number of connections to keep open
