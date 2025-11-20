@@ -10,7 +10,7 @@ services:
   ### Application services
   hyperswitch-server:
     image: hyperswitch-router:latest
-    pull_policy: always
+    pull_policy: missing
     command: /local/bin/router --config-path /local/config/deployments/sandbox_release.toml
     ports:
       - "8080:8080"
@@ -31,7 +31,7 @@ services:
 
   hyperswitch-producer:
     image: hyperswitch-producer:latest
-    pull_policy: always
+    pull_policy: missing
     command: /local/bin/scheduler --config-path /local/config/deployments/producer_sandbox_release.toml
     networks:
       - router_net
@@ -50,7 +50,7 @@ services:
 
   hyperswitch-consumer:
     image: hyperswitch-consumer:latest
-    pull_policy: always
+    pull_policy: missing
     command: /local/bin/scheduler --config-path /local/config/deployments/consumer_sandbox_release.toml
     networks:
       - router_net
@@ -76,7 +76,7 @@ services:
   ### Web Client
   hyperswitch-web:
     image: hyperswitch-web:latest
-    pull_policy: always
+    pull_policy: missing
     ports:
       - "9050:9050"
     networks:
@@ -95,7 +95,7 @@ services:
   ### Control Center
   hyperswitch-control-center:
     image: hyperswitch-control-center:latest
-    pull_policy: always
+    pull_policy: missing
     ports:
       - "9000:9000"
     environment:
