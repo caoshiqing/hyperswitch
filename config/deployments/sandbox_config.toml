@@ -133,7 +133,7 @@ ttl_for_storage_in_secs = 220752000                                   # Time to 
 [log.console]
 enabled = true
 level = "DEBUG"
-log_format = "default"
+log_format = "json"
 
 [log.file]
 enabled = false
