@@ -265,6 +265,7 @@ jwt_secret = "secret"                    # JWT secret used for user authenticati
 [server]
 workers = 8
 port = 8080
+host = "0.0.0.0"
 # This is the grace time (in seconds) given to the actix-server to stop the execution
 # For more details: https://actix.rs/docs/server/#graceful-shutdown
 shutdown_timeout = 30
