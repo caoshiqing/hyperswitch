@@ -203,7 +203,7 @@ bypass_proxy_hosts = "localhost, cluster.local" # A comma-separated list of doma
 
 # Redis credentials
 [redis]
-host = "127.0.0.1"
+host = "192.168.30.127"
 port = 6379
 pool_size = 5
 reconnect_max_attempts = 5
