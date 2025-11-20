@@ -136,13 +136,7 @@ level = "DEBUG"
 log_format = "default"
 
 [log.file]
-enabled = false         # Toggle [true or false]
-path = "logs"           # specify the directory to create log files
-file_name = "debug.log" # base name for log files.
-# levels can be "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF"
-# defaults to "WARN"
-level = "DEBUG"
-# sets the log level for one or more crates
+enabled = false
 
 # Telemetry configuration for metrics and traces
 [log.telemetry]
