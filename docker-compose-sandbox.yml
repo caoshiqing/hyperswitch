@@ -135,3 +135,13 @@ services:
       - HYPERSWITCH_SERVER_URL=http://localhost:8080
     labels:
       logs: "promtail"
+
+  mailhog:
+    image: docker.io/mailhog/mailhog
+    networks:
+      - router_net
+    profiles:
+      - full_setup
+    ports:
+      - "1025:1025"
+      - "8025:8025"
