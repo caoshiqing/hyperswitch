@@ -54,11 +54,7 @@ client_secret = "paypal_client_secret"
 partner_id = "paypal_partner_id"
 
 [connector_request_reference_id_config]
-merchant_ids_send_payment_id_as_connector_request_id = [
-  "merchant_id_1",
-  "merchant_id_2",
-  "etc.,",
-]
+merchant_ids_send_payment_id_as_connector_request_id = []
 
 [cors]
 max_age = 30                            # Maximum time (in seconds) for which this CORS request may be cached.
