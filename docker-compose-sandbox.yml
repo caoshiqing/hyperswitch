@@ -1,0 +1,137 @@
+volumes:
+  pg_data:
+  redisinsight_store:
+  ckh_data:
+
+networks:
+  router_net:
+
+services:
+  ### Application services
+  hyperswitch-server:
+    image: hyperswitch-control-center:latest
+    pull_policy: always
+    command: /local/bin/router --config-path /local/config/deployments/sandbox_release.toml
+    ports:
+      - "8080:8080"
+    networks:
+      - router_net
+    environment:
+      - RUN_ENV=sandbox
+    labels:
+      logs: "promtail"
+    volumes:
+      - ./config:/local/config
+    healthcheck:
+      test: curl --fail http://localhost:8080/health || exit 1
+      interval: 5s
+      retries: 3
+      start_period: 5s
+      timeout: 5s
+
+  hyperswitch-producer:
+    image: hyperswitch-producer:latest
+    pull_policy: always
+    command: /local/bin/scheduler --config-path /local/config/deployments/producer_sandbox_release.toml
+    networks:
+      - router_net
+    profiles:
+      - scheduler
+    volumes:
+      - ./config:/local/config
+    environment:
+      - SCHEDULER_FLOW=producer
+      - RUN_ENV=sandbox
+    depends_on:
+      hyperswitch-consumer:
+        condition: service_healthy
+    labels:
+      logs: "promtail"
+
+  hyperswitch-consumer:
+    image: hyperswitch-consumer:latest
+    pull_policy: always
+    command: /local/bin/scheduler --config-path /local/config/deployments/consumer_sandbox_release.toml
+    networks:
+      - router_net
+    profiles:
+      - scheduler
+    volumes:
+      - ./config:/local/config
+    environment:
+      - SCHEDULER_FLOW=consumer
+      - RUN_ENV=sandbox
+    depends_on:
+      hyperswitch-server:
+        condition: service_healthy
+    labels:
+      logs: "promtail"
+    healthcheck:
+      test: (ps -e | grep scheduler) || exit 1
+      interval: 10s
+      retries: 3
+      start_period: 5s
+      timeout: 10s
+
+  ### Web Client
+  hyperswitch-web:
+    image: hyperswitch-web:latest
+    pull_policy: always
+    ports:
+      - "9050:9050"
+    networks:
+      - router_net
+    depends_on:
+      hyperswitch-server:
+        condition: service_healthy
+    environment:
+      - ENABLE_LOGGING=true
+      - SDK_ENV=local
+      - ENV_LOGGING_URL=http://localhost:3103
+      - ENV_BACKEND_URL=http://localhost:8080
+    labels:
+      logs: "promtail"
+
+  ### Control Center
+  hyperswitch-control-center:
+    image: hyperswitch-control-center:latest
+    pull_policy: always
+    ports:
+      - "9000:9000"
+    environment:
+      - configPath=/tmp/dashboard-config.toml
+      - themeConfigPath=/tmp/dashboard-theme.json
+    volumes:
+      - ./config/dashboard.toml:/tmp/dashboard-config.toml
+      - ./config/dashboard_theme.json:/tmp/dashboard-theme.json
+    depends_on:
+      hyperswitch-server:
+        condition: service_healthy
+      hyperswitch-web:
+        condition: service_started
+    labels:
+      logs: "promtail"
+
+  hyperswitch-demo:
+    image: docker.juspay.io/juspaydotin/hyperswitch-react-demo-app:latest
+    pull_policy: always
+    ports:
+      - "9060:9060"
+      - "5252:5252"
+    networks:
+      - router_net
+    profiles:
+      - full_setup
+    depends_on:
+      hyperswitch-server:
+        condition: service_healthy
+      hyperswitch-web:
+        condition: service_started
+    environment:
+      - HYPERSWITCH_PUBLISHABLE_KEY=placeholder_publishable_key
+      - HYPERSWITCH_SECRET_KEY=placeholder_api_key
+      - PROFILE_ID=placeholder_profile_id
+      - HYPERSWITCH_CLIENT_URL=http://localhost:9050
+      - HYPERSWITCH_SERVER_URL=http://localhost:8080
+    labels:
+      logs: "promtail"
