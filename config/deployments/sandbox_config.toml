@@ -3,7 +3,7 @@
 [analytics.clickhouse]
 username = "cao"     # Clickhouse username
 password = "123456"     # Clickhouse password (optional)
-host = "http://localhost:8123"       # Clickhouse host in http(s)://<URL>:<PORT> format
+host = "http://192.168.30.127:8123"       # Clickhouse host in http(s)://<URL>:<PORT> format
 database_name = "default" # Clickhouse database name
 
 # Analytics configuration.
@@ -87,7 +87,7 @@ sts_role_session_name = "" # An identifier for the assumed role session, used to
 source = "kafka" # The event sink to push events supports kafka or logs (stdout)
 
 [events.kafka]
-brokers = ["localhost:9092"]
+brokers = ["kafka0:9092"]
 intent_analytics_topic = "topic"         # Kafka topic to be used for PaymentIntent events
 attempt_analytics_topic = "topic"        # Kafka topic to be used for PaymentAttempt events
 refund_analytics_topic = "topic"         # Kafka topic to be used for Refund events
@@ -238,7 +238,7 @@ connection_timeout = 10   # Timeout for database connection in seconds
 queue_strategy = "Fifo"   # Add the queue strategy used by the database bb8 client
 
 [opensearch]
-host = "https://localhost:9200"
+host = "https://opensearch:9200"
 enabled = true
 
 [opensearch.auth]
