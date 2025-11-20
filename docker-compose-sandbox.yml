@@ -87,8 +87,8 @@ services:
     environment:
       - ENABLE_LOGGING=true
       - SDK_ENV=sandbox
-      - ENV_LOGGING_URL=http://localhost:3103
-      - ENV_BACKEND_URL=http://localhost:8080
+      - ENV_LOGGING_URL=http://192.168.30.127:3103
+      - ENV_BACKEND_URL=http://192.168.30.127:8080
     labels:
       logs: "promtail"
 
