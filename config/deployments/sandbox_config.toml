@@ -87,7 +87,7 @@ sts_role_session_name = "" # An identifier for the assumed role session, used to
 source = "kafka" # The event sink to push events supports kafka or logs (stdout)
 
 [events.kafka]
-brokers = ["192.168.30.127:9092"]                             # Kafka broker urls for bootstrapping the client
+brokers = ["192.168.30.127:9092"]
 intent_analytics_topic = "topic"         # Kafka topic to be used for PaymentIntent events
 attempt_analytics_topic = "topic"        # Kafka topic to be used for PaymentAttempt events
 refund_analytics_topic = "topic"         # Kafka topic to be used for Refund events
