@@ -107,8 +107,6 @@ services:
     depends_on:
       hyperswitch-server:
         condition: service_healthy
-      hyperswitch-web:
-        condition: service_started
     labels:
       logs: "promtail"
 
