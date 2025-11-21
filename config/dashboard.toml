@@ -1,5 +1,5 @@
 [default.endpoints]
-api_url="http://192.168.30.127:8080"
+api_url="https://192.168.30.127:8080"
 sdk_url="http://192.168.30.127:9050/web/0.127.0/v1/HyperLoader.js"
 apple_pay_certificate_url=""
 dss_certificate_url=""

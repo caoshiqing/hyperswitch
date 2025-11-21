@@ -12,8 +12,6 @@ services:
     image: hyperswitch-router:latest
     pull_policy: missing
     command: /local/bin/router --config-path /local/config/deployments/sandbox_release.toml
-    ports:
-      - "8080:8080"
     networks:
       - router_net
     environment:
@@ -110,11 +108,12 @@ services:
     labels:
       logs: "promtail"
 
-  ### Nginx Reverse Proxy for Control Center (HTTPS)
+  ### Nginx Reverse Proxy for Control Center and Server (HTTPS)
   nginx-control-center:
     image: docker.io/nginx:alpine
     ports:
       - "9000:9000"
+      - "8080:8080"
     networks:
       - router_net
     volumes:
@@ -123,6 +122,8 @@ services:
     depends_on:
       hyperswitch-control-center:
         condition: service_started
+      hyperswitch-server:
+        condition: service_healthy
     labels:
       logs: "promtail"
     healthcheck:
