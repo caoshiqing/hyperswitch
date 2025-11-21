@@ -86,9 +86,9 @@ services:
         condition: service_healthy
     environment:
       - ENABLE_LOGGING=true
-      - SDK_ENV=sandbox
-      - ENV_LOGGING_URL=http://192.168.30.127:3103
-      - ENV_BACKEND_URL=http://192.168.30.127:8080
+      - envLogsUrl=http://192.168.30.127:3103
+      - envBackendUrl=http://192.168.30.127:8080
+      - envSdkUrl=http://192.168.30.127:9050
     labels:
       logs: "promtail"
 
