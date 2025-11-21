@@ -96,8 +96,6 @@ services:
   hyperswitch-control-center:
     image: hyperswitch-control-center:latest
     pull_policy: missing
-    ports:
-      - "9000:9000"
     environment:
       - configPath=/tmp/dashboard-config.toml
       - themeConfigPath=/tmp/dashboard-theme.json
@@ -107,8 +105,32 @@ services:
     depends_on:
       hyperswitch-server:
         condition: service_healthy
+    networks:
+      - router_net
     labels:
       logs: "promtail"
+
+  ### Nginx Reverse Proxy for Control Center (HTTPS)
+  nginx-control-center:
+    image: docker.io/nginx:alpine
+    ports:
+      - "9000:9000"
+    networks:
+      - router_net
+    volumes:
+      - ./config/nginx-control-center.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      hyperswitch-control-center:
+        condition: service_started
+    labels:
+      logs: "promtail"
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--tries=1", "--spider", "https://localhost:9000"]
+      interval: 10s
+      retries: 3
+      start_period: 5s
+      timeout: 5s
 
   hyperswitch-demo:
     image: docker.juspay.io/juspaydotin/hyperswitch-react-demo-app:latest
