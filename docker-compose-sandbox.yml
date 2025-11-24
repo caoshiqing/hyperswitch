@@ -115,6 +115,7 @@ services:
       - "9000:9000"
       - "8080:8080"
       - "9051:9051"
+      - "3104:3104"
     networks:
       - router_net
     extra_hosts:
