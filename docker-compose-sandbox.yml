@@ -3,8 +3,6 @@ volumes:
   redisinsight_store:
   ckh_data:
 
-networks:
-  router_net:
 
 services:
   ### Application services
@@ -281,3 +279,11 @@ services:
     volumes:
       - ./config/vector.yaml:/etc/vector/vector.yaml
       - /var/run/docker.sock:/var/run/docker.sock
+
+
+  networks:
+    router_net:
+      driver: bridge
+        ipam:
+          config:
+            - subnet: 10.0.0.0/24
