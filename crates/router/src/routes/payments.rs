@@ -1216,7 +1216,7 @@ pub async fn payments_connector_session(
         payload,
         |state, auth: auth::AuthenticationData, payload, req_state| {
             let platform = auth.clone().into();
-            payments::payments_core::<
+            payments::payments_core_with_vault::<
                 api_types::Session,
                 payment_types::PaymentsSessionResponse,
                 _,
@@ -1227,7 +1227,7 @@ pub async fn payments_connector_session(
                 state,
                 req_state,
                 platform,
-                auth.profile_id,
+                auth,
                 payments::PaymentSession,
                 payload,
                 api::AuthFlow::Client,

@@ -8009,6 +8009,27 @@ pub async fn get_merchant_connector_account_v2(
     }
 }
 
+pub async fn get_merchant_connector_account_v1(
+    state: &SessionState,
+    key_store: &domain::MerchantKeyStore,
+    merchant_id: &id_type::MerchantId,
+    merchant_connector_id: Option<&id_type::MerchantConnectorAccountId>,
+) -> RouterResult<domain::MerchantConnectorAccount> {
+    let db = &*state.store;
+    match merchant_connector_id {
+        Some(merchant_connector_id) => db
+            .find_by_merchant_connector_account_merchant_id_merchant_connector_id(merchant_id,merchant_connector_id,key_store)
+            .await
+            .to_not_found_response(errors::ApiErrorResponse::MerchantConnectorAccountNotFound {
+                id: merchant_connector_id.get_string_repr().to_string(),
+            }),
+        None => Err(errors::ApiErrorResponse::MissingRequiredField {
+            field_name: "merchant_connector_id",
+        })
+            .attach_printable("merchant_connector_id is not provided"),
+    }
+}
+
 pub fn is_stored_credential(
     recurring_details: &Option<RecurringDetails>,
     payment_token: &Option<String>,

@@ -8746,6 +8746,7 @@ impl From<PaymentsSessionRequest> for PaymentsSessionResponse {
             session_token: vec![],
             payment_id: item.payment_id,
             client_secret,
+            vault_details: None,
         }
     }
 }
@@ -10439,6 +10440,9 @@ pub struct PaymentsSessionResponse {
     pub client_secret: Secret<String, pii::ClientSecret>,
     /// The list of session token object
     pub session_token: Vec<SessionToken>,
+    /// External vault session details
+    pub vault_details: Option<VaultSessionDetails>,
+
 }
 
 #[cfg(feature = "v2")]

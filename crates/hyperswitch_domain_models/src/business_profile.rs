@@ -107,6 +107,14 @@ impl ExternalVaultDetails {
             Self::Skip => false,
         }
     }
+
+    pub fn get_connector_details(&self) -> Option<&ExternalVaultConnectorDetails> {
+        match self {
+            Self::ExternalVaultEnabled(details) => Some(details),
+            Self::Skip => None,
+        }
+    }
+
 }
 
 #[cfg(feature = "v1")]

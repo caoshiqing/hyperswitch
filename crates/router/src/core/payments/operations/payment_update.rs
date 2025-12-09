@@ -522,6 +522,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             is_manual_retry_enabled: None,
             is_l2_l3_enabled: business_profile.is_l2_l3_enabled,
             external_authentication_data: None,
+            vault_session_details: None
         };
 
         let get_trackers_response = operations::GetTrackerResponse {
