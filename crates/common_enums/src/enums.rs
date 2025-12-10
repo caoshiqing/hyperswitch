@@ -2400,6 +2400,7 @@ pub enum PaymentMethod {
     GiftCard,
     OpenBanking,
     MobilePayment,
+    VaultDataCard,
 }
 
 impl PaymentMethod {
@@ -2419,7 +2420,8 @@ impl PaymentMethod {
             | Self::Upi
             | Self::Voucher
             | Self::OpenBanking
-            | Self::MobilePayment => false,
+            | Self::MobilePayment
+            | Self::VaultDataCard=> false,
         }
     }
 
@@ -2439,7 +2441,8 @@ impl PaymentMethod {
             | Self::Upi
             | Self::Voucher
             | Self::OpenBanking
-            | Self::MobilePayment => false,
+            | Self::MobilePayment
+            | Self::VaultDataCard => false,
         }
     }
 }

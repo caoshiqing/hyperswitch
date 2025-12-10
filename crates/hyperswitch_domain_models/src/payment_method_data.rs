@@ -45,6 +45,7 @@ pub enum PaymentMethodData {
     OpenBanking(OpenBankingData),
     NetworkToken(NetworkTokenData),
     MobilePayment(MobilePaymentData),
+    VaultDataCard(Box<ExternalVaultCard>)
 }
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -79,6 +80,7 @@ impl PaymentMethodData {
             Self::GiftCard(_) => Some(common_enums::PaymentMethod::GiftCard),
             Self::OpenBanking(_) => Some(common_enums::PaymentMethod::OpenBanking),
             Self::MobilePayment(_) => Some(common_enums::PaymentMethod::MobilePayment),
+            Self::VaultDataCard(_) => Some(common_enums::PaymentMethod::VaultDataCard),
             Self::CardToken(_) | Self::MandatePayment => None,
         }
     }
@@ -993,6 +995,9 @@ impl From<api_models::payments::PaymentMethodData> for PaymentMethodData {
             }
             api_models::payments::PaymentMethodData::MobilePayment(mobile_payment_data) => {
                 Self::MobilePayment(From::from(mobile_payment_data))
+            }
+            api_models::payments::PaymentMethodData::VaultDataCard(proxy_card_data) => {
+                Self::VaultDataCard(Box::new(From::from(*proxy_card_data)))
             }
         }
     }

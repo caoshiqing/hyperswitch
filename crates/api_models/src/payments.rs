@@ -3239,7 +3239,8 @@ mod payment_method_data_serde {
                     | PaymentMethodData::Card(_)
                     | PaymentMethodData::MandatePayment
                     | PaymentMethodData::OpenBanking(_)
-                    | PaymentMethodData::Wallet(_) => {
+                    | PaymentMethodData::Wallet(_)
+                    | PaymentMethodData::VaultDataCard(_) => {
                         payment_method_data_request.serialize(serializer)
                     }
                 }
@@ -3429,6 +3430,8 @@ pub enum PaymentMethodData {
     #[schema(title = "MobilePayment")]
     #[smithy(value_type = "MobilePaymentData")]
     MobilePayment(MobilePaymentData),
+    #[schema(title = "ProxyCardData")]
+    VaultDataCard(Box<ProxyCardData>),
 }
 
 pub trait GetAddressFromPaymentMethodData {
@@ -3454,7 +3457,8 @@ impl GetAddressFromPaymentMethodData for PaymentMethodData {
             | Self::CardToken(_)
             | Self::OpenBanking(_)
             | Self::MandatePayment
-            | Self::MobilePayment(_) => None,
+            | Self::MobilePayment(_)
+            | Self::VaultDataCard(_) => None,
         }
     }
 }
@@ -3494,6 +3498,7 @@ impl PaymentMethodData {
             Self::OpenBanking(_) => Some(api_enums::PaymentMethod::OpenBanking),
             Self::MobilePayment(_) => Some(api_enums::PaymentMethod::MobilePayment),
             Self::CardToken(_) | Self::MandatePayment => None,
+            Self::VaultDataCard(_) => Some(api_enums::PaymentMethod::VaultDataCard),
         }
     }
 }

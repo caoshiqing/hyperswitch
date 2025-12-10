@@ -25,7 +25,8 @@ impl ConnectorApiIntegrationPayload {
         if let Some(payment_methods_enabled) = response.payment_methods_enabled.clone() {
             for methods in payment_methods_enabled {
                 match methods.payment_method {
-                    api_models::enums::PaymentMethod::Card => {
+                    api_models::enums::PaymentMethod::Card
+                    | api_models::enums::PaymentMethod::VaultDataCard => {
                         if let Some(payment_method_types) = methods.payment_method_types {
                             for method_type in payment_method_types {
                                 match method_type.payment_method_type {

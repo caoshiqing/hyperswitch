@@ -105,6 +105,7 @@ impl IntoDirValue for api_enums::PaymentMethod {
             Self::CardRedirect => Ok(dirval!(PaymentMethod = CardRedirect)),
             Self::OpenBanking => Ok(dirval!(PaymentMethod = OpenBanking)),
             Self::MobilePayment => Ok(dirval!(PaymentMethod = MobilePayment)),
+            Self::VaultDataCard => Ok(dirval!(PaymentMethod = VaultDataCard)),
         }
     }
 }
@@ -171,7 +172,8 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::MobilePayment
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
-                | api_enums::PaymentMethod::GiftCard => Err(KgraphError::ContextConstructionError(
+                | api_enums::PaymentMethod::GiftCard
+                | api_enums::PaymentMethod::VaultDataCard => Err(KgraphError::ContextConstructionError(
                     Box::new(AnalysisErrorType::NotSupported),
                 )),
             },
@@ -190,7 +192,8 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::MobilePayment
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
-                | api_enums::PaymentMethod::GiftCard => Err(KgraphError::ContextConstructionError(
+                | api_enums::PaymentMethod::GiftCard
+                | api_enums::PaymentMethod::VaultDataCard => Err(KgraphError::ContextConstructionError(
                     Box::new(AnalysisErrorType::NotSupported),
                 )),
             },

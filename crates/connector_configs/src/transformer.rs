@@ -113,7 +113,8 @@ impl DashboardRequestPayload {
         if let Some(payment_methods_enabled) = request.payment_methods_enabled.clone() {
             for payload in payment_methods_enabled {
                 match payload.payment_method {
-                    PaymentMethod::Card => {
+                    PaymentMethod::Card
+                    | PaymentMethod::VaultDataCard => {
                         if let Some(card_provider) = payload.card_provider {
                             let payment_type =
                                 PaymentMethodType::from_str(&payload.payment_method_type)

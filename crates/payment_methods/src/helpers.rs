@@ -81,7 +81,8 @@ pub fn validate_payment_method_type_against_payment_method(
 ) -> bool {
     match payment_method {
         #[cfg(feature = "v1")]
-        api_enums::PaymentMethod::Card => matches!(
+        api_enums::PaymentMethod::Card
+        |api_enums::PaymentMethod::VaultDataCard => matches!(
             payment_method_type,
             api_enums::PaymentMethodType::Credit | api_enums::PaymentMethodType::Debit
         ),

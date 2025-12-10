@@ -5514,7 +5514,8 @@ pub async fn get_additional_payment_data(
                 details: Some(mobile_payment.to_owned().into()),
             },
         )),
-        domain::PaymentMethodData::NetworkToken(_) => Ok(None),
+        domain::PaymentMethodData::NetworkToken(_)
+        | domain::PaymentMethodData::VaultDataCard(_) => Ok(None),
     }
 }
 
@@ -6660,6 +6661,15 @@ pub fn get_key_params_for_surcharge_details(
 )> {
     match payment_method_data {
         domain::PaymentMethodData::Card(card) => {
+            // surcharge generated will always be same for credit as well as debit
+            // since surcharge conditions cannot be defined on card_type
+            Some((
+                common_enums::PaymentMethod::Card,
+                common_enums::PaymentMethodType::Credit,
+                card.card_network.clone(),
+            ))
+        }
+        domain::PaymentMethodData::VaultDataCard(card) => {
             // surcharge generated will always be same for credit as well as debit
             // since surcharge conditions cannot be defined on card_type
             Some((
