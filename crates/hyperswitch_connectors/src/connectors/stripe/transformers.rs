@@ -46,7 +46,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::PrimitiveDateTime;
 use url::Url;
-
+use hyperswitch_domain_models::payment_method_data::ExternalVaultCard;
 use crate::{
     constants::headers::STRIPE_COMPATIBLE_CONNECT_ACCOUNT,
     utils::{
@@ -281,6 +281,33 @@ pub struct StripeCardData {
     pub payment_method_data_type: StripePaymentMethodType,
     #[serde(rename = "payment_method_data[card][number]")]
     pub payment_method_data_card_number: cards::CardNumber,
+    #[serde(rename = "payment_method_data[card][exp_month]")]
+    pub payment_method_data_card_exp_month: Secret<String>,
+    #[serde(rename = "payment_method_data[card][exp_year]")]
+    pub payment_method_data_card_exp_year: Secret<String>,
+    #[serde(rename = "payment_method_data[card][cvc]")]
+    pub payment_method_data_card_cvc: Option<Secret<String>>,
+    #[serde(rename = "payment_method_options[card][request_three_d_secure]")]
+    pub payment_method_auth_type: Option<Auth3ds>,
+    #[serde(rename = "payment_method_options[card][network]")]
+    pub payment_method_data_card_preferred_network: Option<StripeCardNetwork>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "payment_method_options[card][request_incremental_authorization]")]
+    pub request_incremental_authorization: Option<StripeRequestIncrementalAuthorization>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "payment_method_options[card][request_extended_authorization]")]
+    request_extended_authorization: Option<StripeRequestExtendedAuthorization>,
+    #[serde(rename = "payment_method_options[card][request_overcapture]")]
+    pub request_overcapture: Option<StripeRequestOvercaptureBool>,
+}
+
+
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct StripeVaultCardData {
+    #[serde(rename = "payment_method_data[type]")]
+    pub payment_method_data_type: StripePaymentMethodType,
+    #[serde(rename = "payment_method_data[card][number]")]
+    pub payment_method_data_card_number: Secret<String>,
     #[serde(rename = "payment_method_data[card][exp_month]")]
     pub payment_method_data_card_exp_month: Secret<String>,
     #[serde(rename = "payment_method_data[card][exp_year]")]
@@ -541,6 +568,8 @@ pub struct MultibancoCreditTransferSourceRequest {
 pub enum StripePaymentMethodData {
     CardToken(StripeCardToken),
     Card(StripeCardData),
+    VaultCard(StripeVaultCardData),
+    VaultCardToken(StripeVaultCardToken),
     PayLater(StripePayLaterData),
     Wallet(StripeWallet),
     BankRedirect(StripeBankRedirectData),
@@ -580,6 +609,18 @@ pub struct StripeCardToken {
     pub token_card_cvc: Secret<String>,
     #[serde(flatten)]
     pub billing: StripeBillingAddressCardToken,
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct StripeVaultCardToken {
+    #[serde(rename = "card[number]")]
+    pub token_card_number:  Secret<String>,
+    #[serde(rename = "card[exp_month]")]
+    pub token_card_exp_month: Secret<String>,
+    #[serde(rename = "card[exp_year]")]
+    pub token_card_exp_year: Secret<String>,
+    #[serde(rename = "card[cvc]")]
+    pub token_card_cvc: Secret<String>,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -1328,6 +1369,23 @@ fn create_stripe_payment_method(
                 payment_request_details.billing_address,
             ))
         }
+        PaymentMethodData::VaultDataCard(card_details) => {
+            let payment_method_auth_type = match payment_request_details.auth_type {
+                enums::AuthenticationType::ThreeDs => Auth3ds::Any,
+                enums::AuthenticationType::NoThreeDs => Auth3ds::Automatic,
+            };
+            Ok((
+                StripePaymentMethodData::try_from((
+                    card_details.deref(),
+                    payment_method_auth_type,
+                    payment_request_details.request_incremental_authorization,
+                    payment_request_details.request_extended_authorization,
+                    payment_request_details.request_overcapture,
+                ))?,
+                Some(StripePaymentMethodType::Card),
+                payment_request_details.billing_address,
+            ))
+        }
         PaymentMethodData::PayLater(pay_later_data) => {
             let stripe_pm_type = StripePaymentMethodType::try_from(pay_later_data)?;
 
@@ -1515,7 +1573,6 @@ fn create_stripe_payment_method(
         | PaymentMethodData::OpenBanking(_)
         | PaymentMethodData::CardToken(_)
         | PaymentMethodData::NetworkToken(_)
-        | PaymentMethodData::VaultDataCard(_)
         | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => Err(
             ConnectorError::NotImplemented(get_unimplemented_payment_method_error_message(
                 "stripe",
@@ -1579,6 +1636,60 @@ impl
             payment_method_auth_type: Some(payment_method_auth_type),
             payment_method_data_card_preferred_network: card
                 .card_network
+                .clone()
+                .and_then(get_stripe_card_network),
+            request_incremental_authorization: if request_incremental_authorization {
+                Some(StripeRequestIncrementalAuthorization::IfAvailable)
+            } else {
+                None
+            },
+            request_extended_authorization: if request_extended_authorization
+                .map(|request_extended_authorization| request_extended_authorization.is_true())
+                .unwrap_or(false)
+            {
+                Some(StripeRequestExtendedAuthorization::IfAvailable)
+            } else {
+                None
+            },
+            request_overcapture,
+        }))
+    }
+}
+
+impl
+TryFrom<(
+    &ExternalVaultCard,
+    Auth3ds,
+    bool,
+    Option<primitive_wrappers::RequestExtendedAuthorizationBool>,
+    Option<StripeRequestOvercaptureBool>,
+)> for StripePaymentMethodData
+{
+    type Error = ConnectorError;
+    fn try_from(
+        (
+            external_vault_card,
+            payment_method_auth_type,
+            request_incremental_authorization,
+            request_extended_authorization,
+            request_overcapture,
+        ): (
+            &ExternalVaultCard,
+            Auth3ds,
+            bool,
+            Option<primitive_wrappers::RequestExtendedAuthorizationBool>,
+            Option<StripeRequestOvercaptureBool>,
+        ),
+    ) -> Result<Self, Self::Error> {
+        Ok(Self::VaultCard(StripeVaultCardData {
+            payment_method_data_type: StripePaymentMethodType::Card,
+            payment_method_data_card_number: external_vault_card.card_number.clone(),
+            payment_method_data_card_exp_month: external_vault_card.card_exp_month.clone(),
+            payment_method_data_card_exp_year: external_vault_card.card_exp_year.clone(),
+            payment_method_data_card_cvc: Some(external_vault_card.card_cvc.clone()),
+            payment_method_auth_type: Some(payment_method_auth_type),
+
+            payment_method_data_card_preferred_network: external_vault_card.card_network
                 .clone()
                 .and_then(get_stripe_card_network),
             request_incremental_authorization: if request_incremental_authorization {
@@ -2363,6 +2474,14 @@ impl TryFrom<&TokenizationRouterData> for TokenRequest {
                     token_card_exp_year: card_details.card_exp_year.clone(),
                     token_card_cvc: card_details.card_cvc.clone(),
                     billing: billing_address,
+                })
+            }
+            PaymentMethodData::VaultDataCard(card_details) => {
+                StripePaymentMethodData::VaultCardToken(StripeVaultCardToken {
+                    token_card_number: card_details.card_number.clone(),
+                    token_card_exp_month: card_details.card_exp_month.clone(),
+                    token_card_exp_year: card_details.card_exp_year.clone(),
+                    token_card_cvc: card_details.card_cvc.clone(),
                 })
             }
             _ => {

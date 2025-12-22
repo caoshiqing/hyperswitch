@@ -57,13 +57,15 @@ where
 
 
         let external_vault_source = profile.external_vault_details.get_connector_details()
-            .map(|details| &details.vault_connector_id);
+            .map(|details| &details.vault_connector_id)
+            .ok_or(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("mca_id not present for external vault")?;
 
         let merchant_connector_account = helpers::get_merchant_connector_account_v1(
             state,
             key_store,
             &profile.merchant_id,
-            external_vault_source,
+            Some(external_vault_source),
         ).await?;
 
 

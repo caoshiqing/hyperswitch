@@ -34,7 +34,7 @@ use router_env::RequestId;
 use scheduler::SchedulerInterface;
 use storage_impl::{redis::RedisStore, MockDb};
 use tokio::sync::oneshot;
-
+use hyperswitch_domain_models::merchant_connector_account::ExternalVaultConnectorMetadata;
 use self::settings::Tenant;
 #[cfg(any(feature = "olap", feature = "oltp"))]
 use super::currency;
@@ -145,7 +145,9 @@ pub struct SessionState {
     pub infra_components: Option<serde_json::Value>,
     pub enhancement: Option<HashMap<String, String>>,
     pub superposition_service: Option<Arc<SuperpositionClient>>,
+    pub external_vault_connector_metadata: Option<ExternalVaultConnectorMetadata>,
 }
+
 impl scheduler::SchedulerSessionState for SessionState {
     fn get_db(&self) -> Box<dyn SchedulerInterface> {
         self.store.get_scheduler_db()
@@ -272,7 +274,18 @@ impl hyperswitch_interfaces::api_client::ApiClientWrapper for SessionState {
         self.api_client.as_ref()
     }
     fn get_proxy(&self) -> hyperswitch_interfaces::types::Proxy {
-        self.conf.proxy.clone()
+        if let Some(vault_meta) = &self.external_vault_connector_metadata {
+            hyperswitch_interfaces::types::Proxy {
+                http_url: None,
+                https_url: Some(String::from(vault_meta.proxy_url.get_string_repr())),
+                idle_pool_connection_timeout: None,
+                bypass_proxy_hosts: None,
+                mitm_ca_certificate: Some(vault_meta.certificate.clone()),
+                mitm_enabled: Some(true),
+            }
+        }else{
+            self.conf.proxy.clone()
+        }
     }
     fn get_request_id(&self) -> Option<RequestId> {
         self.request_id.clone()
@@ -647,6 +660,7 @@ impl AppState {
             infra_components: self.infra_components.clone(),
             enhancement: self.enhancement.clone(),
             superposition_service: self.superposition_service.clone(),
+            external_vault_connector_metadata: None,
         })
     }
 

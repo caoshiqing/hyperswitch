@@ -80,7 +80,7 @@ use crate::{
     payments::additional_info::{
         BankDebitAdditionalData, BankRedirectDetails, BankTransferAdditionalData,
         CardTokenAdditionalData, GiftCardAdditionalData, UpiAdditionalData,
-        WalletAdditionalDataForCard,
+        WalletAdditionalDataForCard,VaultDataCardAdditionalData
     },
 };
 #[cfg(feature = "v1")]
@@ -3960,6 +3960,10 @@ pub enum AdditionalPaymentData {
         #[serde(flatten)]
         details: Option<MobilePaymentData>,
     },
+    VaultDataCard {
+        #[serde(flatten)]
+        details: Option<VaultDataCardAdditionalData>,
+    },
 }
 
 impl AdditionalPaymentData {
@@ -5650,6 +5654,7 @@ where
                 | PaymentMethodDataResponse::Wallet(_)
                 | PaymentMethodDataResponse::BankTransfer(_)
                 | PaymentMethodDataResponse::OpenBanking(_)
+                | PaymentMethodDataResponse::VaultDataCard(_)
                 | PaymentMethodDataResponse::Voucher(_) => {
                     payment_method_data_response.serialize(serializer)
                 }
@@ -5703,6 +5708,8 @@ pub enum PaymentMethodDataResponse {
     OpenBanking(Box<OpenBankingResponse>),
     #[smithy(value_type = "MobilePaymentResponse")]
     MobilePayment(Box<MobilePaymentResponse>),
+    #[smithy(value_type = "VaultCardResponse")]
+    VaultDataCard(Box<VaultCardResponse>),
 }
 
 #[derive(
@@ -5765,6 +5772,17 @@ pub struct CardTokenResponse {
     #[schema(value_type = Option<CardTokenAdditionalData>)]
     #[smithy(value_type = "Option<CardTokenAdditionalData>")]
     details: Option<CardTokenAdditionalData>,
+}
+
+#[derive(
+    Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize, ToSchema, SmithyModel,
+)]
+#[smithy(namespace = "com.hyperswitch.smithy.types")]
+pub struct VaultCardResponse {
+    #[serde(flatten)]
+    #[schema(value_type = Option<VaultDataCardAdditionalData>)]
+    #[smithy(value_type = "Option<VaultDataCardAdditionalData>")]
+    details: Option<VaultDataCardAdditionalData>,
 }
 
 #[derive(
@@ -8878,6 +8896,9 @@ impl From<AdditionalPaymentData> for PaymentMethodDataResponse {
             }
             AdditionalPaymentData::MobilePayment { details } => {
                 Self::MobilePayment(Box::new(MobilePaymentResponse { details }))
+            }
+            AdditionalPaymentData::VaultDataCard{ details } => {
+                Self::VaultDataCard(Box::new(VaultCardResponse { details }))
             }
         }
     }

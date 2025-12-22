@@ -326,6 +326,18 @@ pub struct CardTokenAdditionalData {
 }
 
 #[derive(
+    Eq, PartialEq, Clone, Debug, serde::Deserialize, serde::Serialize, ToSchema, SmithyModel,
+)]
+#[smithy(namespace = "com.hyperswitch.smithy.types")]
+pub struct VaultDataCardAdditionalData {
+    /// The card holder's name
+    #[schema(value_type = String, example = "John Test")]
+    #[smithy(value_type = "String")]
+    pub card_holder_name: Option<Secret<String>>,
+}
+
+
+#[derive(
     Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, ToSchema, SmithyModel,
 )]
 #[serde(rename_all = "snake_case")]

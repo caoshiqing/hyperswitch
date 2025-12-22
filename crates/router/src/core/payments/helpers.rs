@@ -45,6 +45,7 @@ use hyperswitch_domain_models::{
         payment_intent::PaymentIntentFetchConstraints, PaymentIntent,
     },
     router_data::{InteracCustomerInfo, KlarnaSdkResponse, PaymentMethodToken},
+    merchant_connector_account::ExternalVaultConnectorMetadata,
 };
 pub use hyperswitch_interfaces::{
     api::ConnectorSpecifications,
@@ -67,11 +68,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use x509_parser::parse_x509_certificate;
-
-use super::{
-    operations::{BoxedOperation, Operation, PaymentResponse},
-    CustomerDetails, PaymentData,
-};
+use hyperswitch_domain_models::payment_method_data::PaymentMethodData;
+use super::{helpers, operations::{BoxedOperation, Operation, PaymentResponse}, CustomerDetails, PaymentData};
 #[cfg(feature = "v1")]
 use crate::core::{
     payments::{
@@ -2128,6 +2126,8 @@ impl Default for RolloutConfig {
 
 // Re-export ProxyOverride from hyperswitch_interfaces
 pub use hyperswitch_interfaces::types::ProxyOverride;
+use hyperswitch_interfaces::unified_connector_service::UnifiedConnectorServiceError;
+use crate::core::payments::vault_session_v1::generate_vault_session_details;
 
 #[derive(Debug, Clone)]
 pub struct RolloutExecutionResult {
@@ -5514,8 +5514,13 @@ pub async fn get_additional_payment_data(
                 details: Some(mobile_payment.to_owned().into()),
             },
         )),
+        domain::PaymentMethodData::VaultDataCard(external_vault_card) => Ok(Some(
+            api_models::payments::AdditionalPaymentData::VaultDataCard {
+                details: Some((*(external_vault_card.to_owned())).into()),
+            }
+        )),
         domain::PaymentMethodData::NetworkToken(_)
-        | domain::PaymentMethodData::VaultDataCard(_) => Ok(None),
+         => Ok(None),
     }
 }
 
@@ -8551,29 +8556,102 @@ where
         payment_data.get_creds_identifier().map(str::to_owned),
     );
 
-    call_connector_service(
-        state,
-        req_state,
-        platform,
-        connector,
-        operation,
-        payment_data,
-        customer,
-        call_connector_action,
-        validate_result,
-        schedule_time,
-        header_payload,
-        frm_suggestion,
-        business_profile,
-        is_retry_payment,
-        all_keys_required,
-        merchant_connector_account,
-        router_data,
-        tokenization_action,
-        gateway_context,
-    )
-    .await
+
+    // get merchant connector account related to external vault
+    let is_external_vault_enabled = business_profile.external_vault_details.is_external_vault_enabled();
+    payment_data.get_payment_method_data();
+    if is_external_vault_enabled
+        && matches!(
+        payment_data.get_payment_method_data(),
+        Some(domain::PaymentMethodData::VaultDataCard(_))) {
+        let external_vault_connector_details = business_profile.external_vault_details.get_connector_details();
+
+        let external_vault_source = external_vault_connector_details
+            .map(|details| &details.vault_connector_id)
+            .ok_or(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("mca_id not present for external vault")?;
+
+        let external_vault_merchant_connector_account = get_merchant_connector_account_v1(
+            state,
+            platform.get_processor().get_key_store(),
+            &business_profile.merchant_id,
+            Some(external_vault_source),
+        ).await?;
+
+        let external_vault_metadata = external_vault_merchant_connector_account
+            .get_metadata()
+            .ok_or(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("Failed to obtain ConnectorMetadata")?;
+
+        let connector_name = external_vault_merchant_connector_account
+            .get_connector_name_as_string();
+
+        let external_vault_connector = api_enums::VaultConnectors::from_str(&connector_name)
+            .change_context(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("Failed to parse Vault connector")?;
+
+        let vault_metadata = match external_vault_connector {
+            api_enums::VaultConnectors::Vgs => {
+                let vgs_metadata: ExternalVaultConnectorMetadata = external_vault_metadata
+                    .expose()
+                    .parse_value("ExternalVaultConnectorMetadata")
+                    .change_context(errors::ApiErrorResponse::InternalServerError)
+                    .attach_printable("Failed to parse Vgs connector metadata")?;
+
+                Some(vgs_metadata)
+            }
+            api_enums::VaultConnectors::HyperswitchVault | api_enums::VaultConnectors::Tokenex => None,
+        };
+       let updated_state = create_updated_session_state_with_vault_proxy(state.clone(),vault_metadata);
+        call_connector_service(
+            &updated_state,
+            req_state,
+            platform,
+            connector,
+            operation,
+            payment_data,
+            customer,
+            call_connector_action,
+            validate_result,
+            schedule_time,
+            header_payload,
+            frm_suggestion,
+            business_profile,
+            is_retry_payment,
+            all_keys_required,
+            merchant_connector_account,
+            router_data,
+            tokenization_action,
+            gateway_context,
+        )
+            .await
+    } else {
+        call_connector_service(
+            state,
+            req_state,
+            platform,
+            connector,
+            operation,
+            payment_data,
+            customer,
+            call_connector_action,
+            validate_result,
+            schedule_time,
+            header_payload,
+            frm_suggestion,
+            business_profile,
+            is_retry_payment,
+            all_keys_required,
+            merchant_connector_account,
+            router_data,
+            tokenization_action,
+            gateway_context,
+        )
+            .await
+    }
 }
+
+
 
 #[cfg(feature = "v1")]
 #[allow(clippy::too_many_arguments)]
@@ -8803,4 +8881,17 @@ where
             Ok(())
         }
     }
+    }
+
+/// Creates a new SessionState with proxy vault configuration
+fn create_updated_session_state_with_vault_proxy(
+    state: SessionState,
+    vault_connector_metadata: Option<ExternalVaultConnectorMetadata>,
+) -> SessionState {
+    let mut updated_state = state;
+
+    // Create updated configuration with proxy overrides
+    updated_state.external_vault_connector_metadata = vault_connector_metadata;
+
+    updated_state
 }

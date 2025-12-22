@@ -1051,6 +1051,17 @@ impl From<api_models::payments::ProxyCardData> for ExternalVaultCard {
         }
     }
 }
+
+impl From<ExternalVaultCard> for payment_additional_types::VaultDataCardAdditionalData  {
+    fn from(value: ExternalVaultCard) -> Self {
+        let ExternalVaultCard{
+            card_holder_name,..
+        } = value;
+        Self{ card_holder_name }
+    }
+}
+
+
 impl From<api_models::payments::VaultToken> for VaultToken {
     fn from(value: api_models::payments::VaultToken) -> Self {
         let api_models::payments::VaultToken {
@@ -2024,6 +2035,7 @@ impl From<MobilePaymentData> for api_models::payments::MobilePaymentData {
         }
     }
 }
+
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
