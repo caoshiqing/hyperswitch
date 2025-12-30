@@ -45,7 +45,7 @@ pub enum PaymentMethodData {
     OpenBanking(OpenBankingData),
     NetworkToken(NetworkTokenData),
     MobilePayment(MobilePaymentData),
-    VaultDataCard(Box<ExternalVaultCard>)
+    VaultDataCard(Box<ExternalVaultCard>),
 }
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -1052,15 +1052,14 @@ impl From<api_models::payments::ProxyCardData> for ExternalVaultCard {
     }
 }
 
-impl From<ExternalVaultCard> for payment_additional_types::VaultDataCardAdditionalData  {
+impl From<ExternalVaultCard> for payment_additional_types::VaultDataCardAdditionalData {
     fn from(value: ExternalVaultCard) -> Self {
-        let ExternalVaultCard{
-            card_holder_name,..
+        let ExternalVaultCard {
+            card_holder_name, ..
         } = value;
-        Self{ card_holder_name }
+        Self { card_holder_name }
     }
 }
-
 
 impl From<api_models::payments::VaultToken> for VaultToken {
     fn from(value: api_models::payments::VaultToken) -> Self {
@@ -2035,7 +2034,6 @@ impl From<MobilePaymentData> for api_models::payments::MobilePaymentData {
         }
     }
 }
-
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

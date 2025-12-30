@@ -7641,3 +7641,45 @@ api_key = "API Key"
   key1="Password"
   api_secret="Vault Id"
 
+
+
+[axia]
+[[axia.credit]]
+  payment_method_type = "Mastercard"
+[[axia.credit]]
+  payment_method_type = "Visa"
+[[axia.credit]]
+  payment_method_type = "Interac"
+[[axia.credit]]
+  payment_method_type = "AmericanExpress"
+[[axia.credit]]
+  payment_method_type = "JCB"
+[[axia.credit]]
+  payment_method_type = "DinersClub"
+[[axia.credit]]
+  payment_method_type = "Discover"
+[[axia.credit]]
+  payment_method_type = "CartesBancaires"
+[[axia.credit]]
+  payment_method_type = "UnionPay"
+[[axia.debit]]
+  payment_method_type = "Mastercard"
+[[axia.debit]]
+  payment_method_type = "Visa"
+[[axia.debit]]
+  payment_method_type = "Interac"
+[[axia.debit]]
+  payment_method_type = "AmericanExpress"
+[[axia.debit]]
+  payment_method_type = "JCB"
+[[axia.debit]]
+  payment_method_type = "DinersClub"
+[[axia.debit]]
+  payment_method_type = "Discover"
+[[axia.debit]]
+  payment_method_type = "CartesBancaires"
+[[axia.debit]]
+  payment_method_type = "UnionPay"
+[axia.connector_auth.BodyKey]
+  api_key = "API Key ID"
+  key1 = "API Key Secret"

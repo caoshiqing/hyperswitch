@@ -23,6 +23,7 @@ use external_services::{
     grpc_client::{GrpcClients, GrpcHeaders, GrpcHeadersUcs, GrpcHeadersUcsBuilderInitial},
     superposition::SuperpositionClient,
 };
+use hyperswitch_domain_models::merchant_connector_account::ExternalVaultConnectorMetadata;
 use hyperswitch_interfaces::{
     crm::CrmInterface,
     encryption_interface::EncryptionManagementInterface,
@@ -34,7 +35,7 @@ use router_env::RequestId;
 use scheduler::SchedulerInterface;
 use storage_impl::{redis::RedisStore, MockDb};
 use tokio::sync::oneshot;
-use hyperswitch_domain_models::merchant_connector_account::ExternalVaultConnectorMetadata;
+
 use self::settings::Tenant;
 #[cfg(any(feature = "olap", feature = "oltp"))]
 use super::currency;
@@ -283,7 +284,7 @@ impl hyperswitch_interfaces::api_client::ApiClientWrapper for SessionState {
                 mitm_ca_certificate: Some(vault_meta.certificate.clone()),
                 mitm_enabled: Some(true),
             }
-        }else{
+        } else {
             self.conf.proxy.clone()
         }
     }

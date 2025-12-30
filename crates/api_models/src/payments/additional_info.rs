@@ -336,7 +336,6 @@ pub struct VaultDataCardAdditionalData {
     pub card_holder_name: Option<Secret<String>>,
 }
 
-
 #[derive(
     Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, ToSchema, SmithyModel,
 )]

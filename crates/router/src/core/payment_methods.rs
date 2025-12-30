@@ -126,7 +126,7 @@ pub async fn retrieve_payment_method_core(
                 merchant_key_store,
                 business_profile,
             )
-                .await?;
+            .await?;
             Ok((pm_opt.to_owned(), payment_token))
         }
         pm_opt @ Some(pm @ domain::PaymentMethodData::BankDebit(_)) => {

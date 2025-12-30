@@ -173,9 +173,11 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
                 | api_enums::PaymentMethod::GiftCard
-                | api_enums::PaymentMethod::VaultDataCard => Err(KgraphError::ContextConstructionError(
-                    Box::new(AnalysisErrorType::NotSupported),
-                )),
+                | api_enums::PaymentMethod::VaultDataCard => {
+                    Err(KgraphError::ContextConstructionError(Box::new(
+                        AnalysisErrorType::NotSupported,
+                    )))
+                }
             },
             api_enums::PaymentMethodType::Bacs => match self.1 {
                 api_enums::PaymentMethod::BankDebit => Ok(dirval!(BankDebitType = Bacs)),
@@ -193,9 +195,11 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
                 | api_enums::PaymentMethod::GiftCard
-                | api_enums::PaymentMethod::VaultDataCard => Err(KgraphError::ContextConstructionError(
-                    Box::new(AnalysisErrorType::NotSupported),
-                )),
+                | api_enums::PaymentMethod::VaultDataCard => {
+                    Err(KgraphError::ContextConstructionError(Box::new(
+                        AnalysisErrorType::NotSupported,
+                    )))
+                }
             },
             api_enums::PaymentMethodType::Becs => Ok(dirval!(BankDebitType = Becs)),
             api_enums::PaymentMethodType::Sepa => Ok(dirval!(BankDebitType = Sepa)),

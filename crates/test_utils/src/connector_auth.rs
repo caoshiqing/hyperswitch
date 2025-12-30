@@ -22,6 +22,7 @@ pub struct ConnectorAuthentication {
     pub archipel: Option<NoKey>,
     pub authipay: Option<SignatureKey>,
     pub authorizedotnet: Option<BodyKey>,
+    pub axia: Option<HeaderKey>,
     pub bambora: Option<BodyKey>,
     pub bamboraapac: Option<HeaderKey>,
     pub bankofamerica: Option<SignatureKey>,

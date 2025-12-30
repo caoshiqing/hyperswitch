@@ -1,9 +1,5 @@
 use std::{borrow::Cow, collections::HashSet, net::IpAddr, ops::Deref, str::FromStr};
 
-pub use ::payment_methods::helpers::{
-    populate_bin_details_for_payment_method_create,
-    validate_payment_method_type_against_payment_method,
-};
 #[cfg(feature = "v2")]
 use api_models::ephemeral_key::ClientSecretResponse;
 use api_models::{
@@ -39,13 +35,13 @@ pub use hyperswitch_domain_models::customer;
 use hyperswitch_domain_models::payments::payment_intent::CustomerData;
 use hyperswitch_domain_models::{
     mandates::MandateData,
-    payment_method_data::{GetPaymentMethodType, PazeWalletData},
+    merchant_connector_account::ExternalVaultConnectorMetadata,
+    payment_method_data::{GetPaymentMethodType, PaymentMethodData, PazeWalletData},
     payments::{
         self as domain_payments, payment_attempt::PaymentAttempt,
         payment_intent::PaymentIntentFetchConstraints, PaymentIntent,
     },
     router_data::{InteracCustomerInfo, KlarnaSdkResponse, PaymentMethodToken},
-    merchant_connector_account::ExternalVaultConnectorMetadata,
 };
 pub use hyperswitch_interfaces::{
     api::ConnectorSpecifications,
@@ -60,6 +56,10 @@ use openssl::{
     pkey::PKey,
     symm::{decrypt_aead, Cipher},
 };
+pub use ::payment_methods::helpers::{
+    populate_bin_details_for_payment_method_create,
+    validate_payment_method_type_against_payment_method,
+};
 use rand::Rng;
 #[cfg(feature = "v2")]
 use redis_interface::errors::RedisError;
@@ -68,8 +68,12 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use x509_parser::parse_x509_certificate;
-use hyperswitch_domain_models::payment_method_data::PaymentMethodData;
-use super::{helpers, operations::{BoxedOperation, Operation, PaymentResponse}, CustomerDetails, PaymentData};
+
+use super::{
+    helpers,
+    operations::{BoxedOperation, Operation, PaymentResponse},
+    CustomerDetails, PaymentData,
+};
 #[cfg(feature = "v1")]
 use crate::core::{
     payments::{
@@ -2127,6 +2131,7 @@ impl Default for RolloutConfig {
 // Re-export ProxyOverride from hyperswitch_interfaces
 pub use hyperswitch_interfaces::types::ProxyOverride;
 use hyperswitch_interfaces::unified_connector_service::UnifiedConnectorServiceError;
+
 use crate::core::payments::vault_session_v1::generate_vault_session_details;
 
 #[derive(Debug, Clone)]
@@ -5517,10 +5522,9 @@ pub async fn get_additional_payment_data(
         domain::PaymentMethodData::VaultDataCard(external_vault_card) => Ok(Some(
             api_models::payments::AdditionalPaymentData::VaultDataCard {
                 details: Some((*(external_vault_card.to_owned())).into()),
-            }
+            },
         )),
-        domain::PaymentMethodData::NetworkToken(_)
-         => Ok(None),
+        domain::PaymentMethodData::NetworkToken(_) => Ok(None),
     }
 }
 
@@ -8033,7 +8037,11 @@ pub async fn get_merchant_connector_account_v1(
     let db = &*state.store;
     match merchant_connector_id {
         Some(merchant_connector_id) => db
-            .find_by_merchant_connector_account_merchant_id_merchant_connector_id(merchant_id,merchant_connector_id,key_store)
+            .find_by_merchant_connector_account_merchant_id_merchant_connector_id(
+                merchant_id,
+                merchant_connector_id,
+                key_store,
+            )
             .await
             .to_not_found_response(errors::ApiErrorResponse::MerchantConnectorAccountNotFound {
                 id: merchant_connector_id.get_string_repr().to_string(),
@@ -8041,7 +8049,7 @@ pub async fn get_merchant_connector_account_v1(
         None => Err(errors::ApiErrorResponse::MissingRequiredField {
             field_name: "merchant_connector_id",
         })
-            .attach_printable("merchant_connector_id is not provided"),
+        .attach_printable("merchant_connector_id is not provided"),
     }
 }
 
@@ -8556,15 +8564,20 @@ where
         payment_data.get_creds_identifier().map(str::to_owned),
     );
 
-
     // get merchant connector account related to external vault
-    let is_external_vault_enabled = business_profile.external_vault_details.is_external_vault_enabled();
+    let is_external_vault_enabled = business_profile
+        .external_vault_details
+        .is_external_vault_enabled();
     payment_data.get_payment_method_data();
     if is_external_vault_enabled
         && matches!(
-        payment_data.get_payment_method_data(),
-        Some(domain::PaymentMethodData::VaultDataCard(_))) {
-        let external_vault_connector_details = business_profile.external_vault_details.get_connector_details();
+            payment_data.get_payment_method_data(),
+            Some(domain::PaymentMethodData::VaultDataCard(_))
+        )
+    {
+        let external_vault_connector_details = business_profile
+            .external_vault_details
+            .get_connector_details();
 
         let external_vault_source = external_vault_connector_details
             .map(|details| &details.vault_connector_id)
@@ -8576,15 +8589,16 @@ where
             platform.get_processor().get_key_store(),
             &business_profile.merchant_id,
             Some(external_vault_source),
-        ).await?;
+        )
+        .await?;
 
         let external_vault_metadata = external_vault_merchant_connector_account
             .get_metadata()
             .ok_or(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Failed to obtain ConnectorMetadata")?;
 
-        let connector_name = external_vault_merchant_connector_account
-            .get_connector_name_as_string();
+        let connector_name =
+            external_vault_merchant_connector_account.get_connector_name_as_string();
 
         let external_vault_connector = api_enums::VaultConnectors::from_str(&connector_name)
             .change_context(errors::ApiErrorResponse::InternalServerError)
@@ -8600,9 +8614,12 @@ where
 
                 Some(vgs_metadata)
             }
-            api_enums::VaultConnectors::HyperswitchVault | api_enums::VaultConnectors::Tokenex => None,
+            api_enums::VaultConnectors::HyperswitchVault | api_enums::VaultConnectors::Tokenex => {
+                None
+            }
         };
-       let updated_state = create_updated_session_state_with_vault_proxy(state.clone(),vault_metadata);
+        let updated_state =
+            create_updated_session_state_with_vault_proxy(state.clone(), vault_metadata);
         call_connector_service(
             &updated_state,
             req_state,
@@ -8624,7 +8641,7 @@ where
             tokenization_action,
             gateway_context,
         )
-            .await
+        .await
     } else {
         call_connector_service(
             state,
@@ -8647,11 +8664,9 @@ where
             tokenization_action,
             gateway_context,
         )
-            .await
+        .await
     }
 }
-
-
 
 #[cfg(feature = "v1")]
 #[allow(clippy::too_many_arguments)]
@@ -8881,7 +8896,7 @@ where
             Ok(())
         }
     }
-    }
+}
 
 /// Creates a new SessionState with proxy vault configuration
 fn create_updated_session_state_with_vault_proxy(

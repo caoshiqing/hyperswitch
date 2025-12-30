@@ -17,8 +17,8 @@ use common_utils::{
 use error_stack::ResultExt;
 use hyperswitch_domain_models::{
     payment_method_data::{
-        self, BankRedirectData, Card, CardRedirectData, GiftCardData, GooglePayWalletData,
-        PayLaterData, PaymentMethodData, VoucherData, WalletData,
+        self, BankRedirectData, Card, CardRedirectData, ExternalVaultCard, GiftCardData,
+        GooglePayWalletData, PayLaterData, PaymentMethodData, VoucherData, WalletData,
     },
     router_data::{
         AdditionalPaymentMethodConnectorResponse, ConnectorAuthType, ConnectorResponseData,
@@ -46,7 +46,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::PrimitiveDateTime;
 use url::Url;
-use hyperswitch_domain_models::payment_method_data::ExternalVaultCard;
+
 use crate::{
     constants::headers::STRIPE_COMPATIBLE_CONNECT_ACCOUNT,
     utils::{
@@ -300,7 +300,6 @@ pub struct StripeCardData {
     #[serde(rename = "payment_method_options[card][request_overcapture]")]
     pub request_overcapture: Option<StripeRequestOvercaptureBool>,
 }
-
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct StripeVaultCardData {
@@ -614,7 +613,7 @@ pub struct StripeCardToken {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct StripeVaultCardToken {
     #[serde(rename = "card[number]")]
-    pub token_card_number:  Secret<String>,
+    pub token_card_number: Secret<String>,
     #[serde(rename = "card[exp_month]")]
     pub token_card_exp_month: Secret<String>,
     #[serde(rename = "card[exp_year]")]
@@ -1657,13 +1656,13 @@ impl
 }
 
 impl
-TryFrom<(
-    &ExternalVaultCard,
-    Auth3ds,
-    bool,
-    Option<primitive_wrappers::RequestExtendedAuthorizationBool>,
-    Option<StripeRequestOvercaptureBool>,
-)> for StripePaymentMethodData
+    TryFrom<(
+        &ExternalVaultCard,
+        Auth3ds,
+        bool,
+        Option<primitive_wrappers::RequestExtendedAuthorizationBool>,
+        Option<StripeRequestOvercaptureBool>,
+    )> for StripePaymentMethodData
 {
     type Error = ConnectorError;
     fn try_from(
@@ -1689,7 +1688,8 @@ TryFrom<(
             payment_method_data_card_cvc: Some(external_vault_card.card_cvc.clone()),
             payment_method_auth_type: Some(payment_method_auth_type),
 
-            payment_method_data_card_preferred_network: external_vault_card.card_network
+            payment_method_data_card_preferred_network: external_vault_card
+                .card_network
                 .clone()
                 .and_then(get_stripe_card_network),
             request_incremental_authorization: if request_incremental_authorization {

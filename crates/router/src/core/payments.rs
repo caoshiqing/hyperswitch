@@ -28,7 +28,6 @@ use external_services::grpc_client;
 #[cfg(feature = "v2")]
 pub mod payment_methods;
 pub mod vault_session_v1;
-use crate::routes::app::SessionStateInfo;
 use std::future;
 
 #[cfg(feature = "olap")]
@@ -38,7 +37,7 @@ use api_models::payments::RevenueRecoveryGetIntentResponse;
 use api_models::{
     self, enums,
     mandates::RecurringDetails,
-    payments::{self as payments_api},
+    payments::{self as payments_api, VaultSessionDetails},
 };
 pub use common_enums::enums::{CallConnectorAction, ExecutionMode, ExecutionPath, GatewaySystem};
 use common_types::payments as common_payments_types;
@@ -81,7 +80,7 @@ use scheduler::utils as pt_utils;
 pub use session_operation::payments_session_core;
 #[cfg(feature = "olap")]
 use strum::IntoEnumIterator;
-use api_models::payments::VaultSessionDetails;
+
 #[cfg(feature = "v1")]
 pub use self::operations::{
     PaymentApprove, PaymentCancel, PaymentCancelPostCapture, PaymentCapture, PaymentConfirm,
@@ -138,7 +137,12 @@ use crate::{
     },
     db::StorageInterface,
     logger,
-    routes::{app::ReqState, metrics, payment_methods::ParentPaymentMethodToken, SessionState},
+    routes::{
+        app::{ReqState, SessionStateInfo},
+        metrics,
+        payment_methods::ParentPaymentMethodToken,
+        SessionState,
+    },
     services::{self, api::Authenticate, ConnectorRedirectResponse},
     types::{
         self as router_types,
@@ -627,7 +631,6 @@ where
         .await
         .to_not_found_response(errors::ApiErrorResponse::CustomerNotFound)
         .attach_printable("Failed while fetching/creating customer")?;
-
 
     let authentication_type =
         call_decision_manager(state, platform, &business_profile, &payment_data).await?;
@@ -2199,7 +2202,6 @@ where
     )
 }
 
-
 #[cfg(feature = "v1")]
 #[allow(clippy::too_many_arguments)]
 pub async fn payments_core_with_vault<F, Res, Req, Op, FData, D>(
@@ -2222,14 +2224,14 @@ where
     Req: Debug + Authenticate + Clone,
     D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
     Res: transformers::ToResponse<F, D, Op>,
-// To create connector flow specific interface data
+    // To create connector flow specific interface data
     D: ConstructFlowSpecificData<F, FData, router_types::PaymentsResponseData>,
     RouterData<F, FData, router_types::PaymentsResponseData>: Feature<F, FData>,
-// To construct connector flow specific api
+    // To construct connector flow specific api
     dyn api::Connector:
-    services::api::ConnectorIntegration<F, FData, router_types::PaymentsResponseData>,
+        services::api::ConnectorIntegration<F, FData, router_types::PaymentsResponseData>,
 
-// To perform router related operation for PaymentResponse
+    // To perform router related operation for PaymentResponse
     PaymentResponse: Operation<F, FData, Data = D>,
 {
     let eligible_routable_connectors = eligible_connectors.map(|connectors| {
@@ -2252,11 +2254,15 @@ where
             eligible_routable_connectors,
             header_payload.clone(),
         )
-            .await?;
+        .await?;
     if let Some(profile_id) = payment_data.get_payment_intent().profile_id.as_ref() {
         let profile = state
             .store()
-            .find_business_profile_by_merchant_id_profile_id(&auth.key_store, auth.merchant_account.get_id(), &profile_id)
+            .find_business_profile_by_merchant_id_profile_id(
+                &auth.key_store,
+                auth.merchant_account.get_id(),
+                &profile_id,
+            )
             .await
             .to_not_found_response(errors::ApiErrorResponse::Unauthorized)?;
 
@@ -2268,7 +2274,8 @@ where
             &mut payment_data,
             &auth.key_store,
             header_payload.clone(),
-        ).await?;
+        )
+        .await?;
     }
 
     Res::generate_response(
@@ -8075,7 +8082,6 @@ where
     pub is_l2_l3_enabled: bool,
     pub external_authentication_data: Option<api_models::payments::ExternalThreeDsData>,
     pub vault_session_details: Option<VaultSessionDetails>,
-
 }
 
 #[cfg(feature = "v1")]
@@ -11629,7 +11635,6 @@ pub trait OperationSessionGetters<F> {
         &self,
     ) -> Option<HashMap<enums::PaymentMethodType, domain::PreRoutingConnectorChoice>>;
 
-
     fn get_optional_external_vault_session_details(&self) -> Option<VaultSessionDetails>;
     #[cfg(feature = "v1")]
     fn get_click_to_pay_service_details(&self) -> Option<&api_models::payments::CtpServiceDetails>;
@@ -12066,7 +12071,10 @@ impl<F: Clone> OperationSessionSetters<F> for PaymentData<F> {
         self.payment_attempt.connector_request_reference_id = Some(connector_request_reference_id);
     }
 
-    fn set_vault_session_details(&mut self, external_vault_session_details: Option<VaultSessionDetails>) {
+    fn set_vault_session_details(
+        &mut self,
+        external_vault_session_details: Option<VaultSessionDetails>,
+    ) {
         self.vault_session_details = external_vault_session_details
     }
 }

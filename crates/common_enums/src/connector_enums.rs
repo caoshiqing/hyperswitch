@@ -189,6 +189,7 @@ pub enum RoutableConnectors {
     Netcetera,
     Cardinal,
     Threedsecureio,
+    Axia,
 }
 
 // A connector is an integration to fulfill payments
@@ -380,6 +381,7 @@ pub enum Connector {
     Zen,
     Zift,
     Zsl,
+    Axia,
 }
 
 impl Connector {
@@ -591,6 +593,7 @@ impl Connector {
             | Self::Datatrans
             | Self::Paytm
             | Self::Payjustnow
+            | Self::Axia
             | Self::Phonepe => false,
             Self::Checkout |Self::Zift| Self::Nmi |Self::Cybersource | Self::Archipel | Self::Nuvei | Self::Adyen => true,
         }
@@ -773,6 +776,7 @@ impl From<RoutableConnectors> for Connector {
             RoutableConnectors::Netcetera => Self::Netcetera,
             RoutableConnectors::Cardinal => Self::Cardinal,
             RoutableConnectors::Threedsecureio => Self::Threedsecureio,
+            RoutableConnectors::Axia => Self::Axia,
         }
     }
 }
@@ -914,6 +918,7 @@ impl TryFrom<Connector> for RoutableConnectors {
             Connector::Paytm => Ok(Self::Paytm),
             Connector::Phonepe => Ok(Self::Phonepe),
             Connector::Payjustnow => Ok(Self::Payjustnow),
+            Connector::Axia => Ok(Self::Axia),
             Connector::CtpMastercard
             | Connector::Gpayments
             | Connector::HyperswitchVault

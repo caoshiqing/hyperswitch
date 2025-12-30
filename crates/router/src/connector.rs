@@ -6,7 +6,7 @@ pub use hyperswitch_connectors::connectors::{
     aci, aci::Aci, adyen, adyen::Adyen, adyenplatform, adyenplatform::Adyenplatform, affirm,
     affirm::Affirm, airwallex, airwallex::Airwallex, amazonpay, amazonpay::Amazonpay, archipel,
     archipel::Archipel, authipay, authipay::Authipay, authorizedotnet,
-    authorizedotnet::Authorizedotnet, bambora, bambora::Bambora, bamboraapac,
+    authorizedotnet::Authorizedotnet, axia, axia::Axia, bambora, bambora::Bambora, bamboraapac,
     bamboraapac::Bamboraapac, bankofamerica, bankofamerica::Bankofamerica, barclaycard,
     barclaycard::Barclaycard, billwerk, billwerk::Billwerk, bitpay, bitpay::Bitpay,
     blackhawknetwork, blackhawknetwork::Blackhawknetwork, bluesnap, bluesnap::Bluesnap, boku,

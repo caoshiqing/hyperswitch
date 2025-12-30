@@ -2421,7 +2421,7 @@ impl PaymentMethod {
             | Self::Voucher
             | Self::OpenBanking
             | Self::MobilePayment
-            | Self::VaultDataCard=> false,
+            | Self::VaultDataCard => false,
         }
     }
 

@@ -240,6 +240,7 @@ pub struct ConnectorConfig {
     pub amazonpay: Option<ConnectorTomlConfig>,
     pub archipel: Option<ConnectorTomlConfig>,
     pub authorizedotnet: Option<ConnectorTomlConfig>,
+    pub axia: Option<ConnectorTomlConfig>,
     pub bamboraapac: Option<ConnectorTomlConfig>,
     pub bankofamerica: Option<ConnectorTomlConfig>,
     pub barclaycard: Option<ConnectorTomlConfig>,
@@ -622,6 +623,7 @@ impl ConnectorConfig {
             Connector::Zift => Ok(connector_data.zift),
             Connector::Phonepe => Ok(connector_data.phonepe),
             Connector::Payjustnow => Ok(connector_data.payjustnow),
+            Connector::Axia => Ok(connector_data.axia),
         }
     }
 }

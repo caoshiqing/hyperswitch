@@ -80,7 +80,7 @@ use crate::{
     payments::additional_info::{
         BankDebitAdditionalData, BankRedirectDetails, BankTransferAdditionalData,
         CardTokenAdditionalData, GiftCardAdditionalData, UpiAdditionalData,
-        WalletAdditionalDataForCard,VaultDataCardAdditionalData
+        VaultDataCardAdditionalData, WalletAdditionalDataForCard,
     },
 };
 #[cfg(feature = "v1")]
@@ -8897,7 +8897,7 @@ impl From<AdditionalPaymentData> for PaymentMethodDataResponse {
             AdditionalPaymentData::MobilePayment { details } => {
                 Self::MobilePayment(Box::new(MobilePaymentResponse { details }))
             }
-            AdditionalPaymentData::VaultDataCard{ details } => {
+            AdditionalPaymentData::VaultDataCard { details } => {
                 Self::VaultDataCard(Box::new(VaultCardResponse { details }))
             }
         }
@@ -10468,7 +10468,6 @@ pub struct PaymentsSessionResponse {
     pub session_token: Vec<SessionToken>,
     /// External vault session details
     pub vault_details: Option<VaultSessionDetails>,
-
 }
 
 #[cfg(feature = "v2")]

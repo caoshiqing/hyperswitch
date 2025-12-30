@@ -114,7 +114,6 @@ impl ExternalVaultDetails {
             Self::Skip => None,
         }
     }
-
 }
 
 #[cfg(feature = "v1")]

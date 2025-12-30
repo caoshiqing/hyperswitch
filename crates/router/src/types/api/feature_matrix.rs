@@ -417,6 +417,9 @@ impl FeatureMatrixConnectorData {
                         .attach_printable(format!("invalid connector name: {connector_name}")))
                     .change_context(errors::ApiErrorResponse::InternalServerError)
                 }
+                enums::Connector::Axia => {
+                    Ok(ConnectorEnum::Old(Box::new(connector::Axia::new())))
+                }
             },
             Err(_) => Err(report!(errors::ConnectorError::InvalidConnectorName)
                 .attach_printable(format!("invalid connector name: {connector_name}")))

@@ -6401,8 +6401,7 @@ pub enum PaymentMethodDataType {
 impl From<PaymentMethodData> for PaymentMethodDataType {
     fn from(pm_data: PaymentMethodData) -> Self {
         match pm_data {
-            PaymentMethodData::Card(_)
-            | PaymentMethodData::VaultDataCard(_) => Self::Card,
+            PaymentMethodData::Card(_) | PaymentMethodData::VaultDataCard(_) => Self::Card,
             PaymentMethodData::NetworkToken(_) => Self::NetworkToken,
             PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Self::NetworkTransactionIdAndCardDetails

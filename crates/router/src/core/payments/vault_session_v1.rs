@@ -1,20 +1,5 @@
-use crate::{
-    core::{
-        errors::{self, RouterResult},
-        payments::{
-            flows::{ConstructFlowSpecificData, Feature},
-            helpers,
-            OperationSessionGetters, OperationSessionSetters,
-        },
-    },
-    routes::{SessionState},
-    services::{self},
-    types::{
-        self as router_types,
-        api::{self, enums as api_enums},
-        domain,
-    },
-};
+use std::str::FromStr;
+
 use error_stack::ResultExt;
 pub use hyperswitch_domain_models::{
     mandates::MandateData,
@@ -27,36 +12,52 @@ pub use hyperswitch_domain_models::{
     types::{VaultRouterData, VaultRouterDataV2},
 };
 use router_env::Env;
-use std::str::FromStr;
+
+use crate::{
+    core::{
+        errors::{self, RouterResult},
+        payments::{
+            flows::{ConstructFlowSpecificData, Feature},
+            helpers, OperationSessionGetters, OperationSessionSetters,
+        },
+    },
+    routes::SessionState,
+    services::{self},
+    types::{
+        self as router_types,
+        api::{self, enums as api_enums},
+        domain,
+    },
+};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn populate_vault_session_details<F, RouterDReq, D>(
     state: &SessionState,
-    customer: &Option<domain::Customer>,
+    _customer: &Option<domain::Customer>,
     platform: &domain::Platform,
     profile: &domain::Profile,
     payment_data: &mut D,
     key_store: &domain::MerchantKeyStore,
-    header_payload: HeaderPayload,
+    _header_payload: HeaderPayload,
 ) -> RouterResult<()>
 where
     F: Send + Clone + Sync,
     RouterDReq: Send + Sync,
 
-// To create connector flow specific interface data
+    // To create connector flow specific interface data
     D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
     D: ConstructFlowSpecificData<F, RouterDReq, crate::types::PaymentsResponseData>,
     RouterData<F, RouterDReq, crate::types::PaymentsResponseData>: Feature<F, RouterDReq> + Send,
-// To construct connector flow specific api
+    // To construct connector flow specific api
     dyn api::Connector:
-    services::api::ConnectorIntegration<F, RouterDReq, crate::types::PaymentsResponseData>,
+        services::api::ConnectorIntegration<F, RouterDReq, crate::types::PaymentsResponseData>,
 {
     let is_external_vault_sdk_enabled = profile.external_vault_details.is_external_vault_enabled();
 
     if is_external_vault_sdk_enabled {
-
-
-        let external_vault_source = profile.external_vault_details.get_connector_details()
+        let external_vault_source = profile
+            .external_vault_details
+            .get_connector_details()
             .map(|details| &details.vault_connector_id)
             .ok_or(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("mca_id not present for external vault")?;
@@ -66,8 +67,8 @@ where
             key_store,
             &profile.merchant_id,
             Some(external_vault_source),
-        ).await?;
-
+        )
+        .await?;
 
         let vault_session_details = generate_vault_session_details(
             state,
@@ -75,7 +76,7 @@ where
             &merchant_connector_account,
             payment_data.get_connector_customer_id(),
         )
-            .await?;
+        .await?;
 
         payment_data.set_vault_session_details(vault_session_details);
     }
@@ -84,12 +85,11 @@ where
 
 pub async fn generate_vault_session_details(
     state: &SessionState,
-    platform: &domain::Platform,
+    _platform: &domain::Platform,
     merchant_connector_account: &domain::MerchantConnectorAccount,
-    connector_customer_id: Option<String>,
+    _connector_customer_id: Option<String>,
 ) -> RouterResult<Option<api::VaultSessionDetails>> {
-    let connector_name = merchant_connector_account
-        .get_connector_name_as_string();
+    let connector_name = merchant_connector_account.get_connector_name_as_string();
 
     let connector = api_enums::VaultConnectors::from_str(&connector_name)
         .change_context(errors::ApiErrorResponse::InternalServerError)?;
@@ -110,7 +110,7 @@ pub async fn generate_vault_session_details(
                 Env::Sandbox | Env::Development | Env::Integ => "sandbox",
                 Env::Production => "live",
             }
-                .to_string();
+            .to_string();
             Ok(Some(api::VaultSessionDetails::Vgs(
                 api::VgsSessionDetails {
                     external_vault_id: api_secret,
@@ -121,12 +121,8 @@ pub async fn generate_vault_session_details(
         // create session for hyperswitch vault
         (
             api_enums::VaultConnectors::HyperswitchVault,
-            router_types::ConnectorAuthType::SignatureKey {
-                key1, api_secret, ..
-            },
-        ) => {
-           Ok(None)
-        }
+            router_types::ConnectorAuthType::SignatureKey { .. },
+        ) => Ok(None),
         _ => {
             router_env::logger::warn!(
                 "External vault session creation is not supported for connector: {}",

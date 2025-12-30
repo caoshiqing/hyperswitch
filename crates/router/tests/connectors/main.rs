@@ -13,6 +13,7 @@ mod affirm;
 mod airwallex;
 mod amazonpay;
 mod authorizedotnet;
+mod axia;
 mod bambora;
 mod bamboraapac;
 #[cfg(feature = "dummy_connector")]
