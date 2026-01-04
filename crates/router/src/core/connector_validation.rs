@@ -598,6 +598,10 @@ impl ConnectorAuthTypeAndMetadataValidation<'_> {
                 finix::transformers::FinixAuthType::try_from(self.auth_type)?;
                 Ok(())
             }
+            api_enums::Connector::Axia => {
+                axia::transformers::AxiaAuthType::try_from(self.auth_type)?;
+                Ok(())
+            }
         }
     }
 }

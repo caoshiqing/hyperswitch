@@ -325,6 +325,7 @@ impl TryFrom<&NordeaRouterData<&PaymentsPreProcessingRouterData>> for NordeaPaym
             | Some(PaymentMethodData::CardToken(_))
             | Some(PaymentMethodData::NetworkToken(_))
             | Some(PaymentMethodData::Card(_))
+            | Some(PaymentMethodData::VaultDataCard(_))
             | None => {
                 Err(errors::ConnectorError::NotImplemented("Payment method".to_string()).into())
             }

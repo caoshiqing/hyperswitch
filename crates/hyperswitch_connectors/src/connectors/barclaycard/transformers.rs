@@ -813,6 +813,7 @@ impl TryFrom<&BarclaycardRouterData<&PaymentsPreProcessingRouterData>>
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Barclaycard"),
@@ -1095,6 +1096,7 @@ impl TryFrom<&BarclaycardRouterData<&PaymentsAuthorizeRouterData>> for Barclayca
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Barclaycard"),
@@ -1570,6 +1572,7 @@ impl TryFrom<&BarclaycardRouterData<&PaymentsAuthorizeRouterData>> for Barclayca
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Barclaycard"),
@@ -1693,6 +1696,7 @@ impl TryFrom<&BarclaycardRouterData<&PaymentsCompleteAuthorizeRouterData>>
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Barclaycard"),
@@ -2069,6 +2073,7 @@ impl TryFrom<PaymentsResponseRouterData<BarclaycardPaymentsResponse>>
                     | common_enums::PaymentMethod::Upi
                     | common_enums::PaymentMethod::Voucher
                     | common_enums::PaymentMethod::OpenBanking
+                    | common_enums::PaymentMethod::VaultDataCard
                     | common_enums::PaymentMethod::GiftCard => None,
                 };
 
@@ -2253,6 +2258,7 @@ impl TryFrom<PaymentsSyncResponseRouterData<BarclaycardTransactionResponse>>
                     | common_enums::PaymentMethod::Upi
                     | common_enums::PaymentMethod::Voucher
                     | common_enums::PaymentMethod::OpenBanking
+                    | common_enums::PaymentMethod::VaultDataCard
                     | common_enums::PaymentMethod::GiftCard => None,
                 };
 

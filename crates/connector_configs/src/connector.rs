@@ -186,6 +186,7 @@ pub struct ConfigMetadata {
     pub client_merchant_reference_id: Option<InputData>,
     pub merchant_payment_method_route_id: Option<InputData>,
     pub site: Option<InputData>,
+    pub purpose_of_payment: Option<InputData>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -239,6 +240,7 @@ pub struct ConnectorConfig {
     pub amazonpay: Option<ConnectorTomlConfig>,
     pub archipel: Option<ConnectorTomlConfig>,
     pub authorizedotnet: Option<ConnectorTomlConfig>,
+    pub axia: Option<ConnectorTomlConfig>,
     pub bamboraapac: Option<ConnectorTomlConfig>,
     pub bankofamerica: Option<ConnectorTomlConfig>,
     pub barclaycard: Option<ConnectorTomlConfig>,
@@ -275,6 +277,7 @@ pub struct ConnectorConfig {
     pub dwolla: Option<ConnectorTomlConfig>,
     pub ebanx_payout: Option<ConnectorTomlConfig>,
     pub elavon: Option<ConnectorTomlConfig>,
+    pub envoy: Option<ConnectorTomlConfig>,
     pub facilitapay: Option<ConnectorTomlConfig>,
     pub finix: Option<ConnectorTomlConfig>,
     pub fiserv: Option<ConnectorTomlConfig>,
@@ -366,6 +369,8 @@ pub struct ConnectorConfig {
     pub worldpay_payout: Option<ConnectorTomlConfig>,
     pub worldpayvantiv: Option<ConnectorTomlConfig>,
     pub worldpayxml: Option<ConnectorTomlConfig>,
+    #[cfg(feature = "payouts")]
+    pub worldpayxml_payout: Option<ConnectorTomlConfig>,
     pub xendit: Option<ConnectorTomlConfig>,
     pub zift: Option<ConnectorTomlConfig>,
     pub square: Option<ConnectorTomlConfig>,
@@ -416,6 +421,7 @@ impl ConnectorConfig {
             PayoutConnectors::Stripe => Ok(connector_data.stripe_payout),
             PayoutConnectors::Wise => Ok(connector_data.wise_payout),
             PayoutConnectors::Worldpay => Ok(connector_data.worldpay_payout),
+            PayoutConnectors::Worldpayxml => Ok(connector_data.worldpayxml_payout),
         }
     }
 
@@ -617,6 +623,7 @@ impl ConnectorConfig {
             Connector::Zift => Ok(connector_data.zift),
             Connector::Phonepe => Ok(connector_data.phonepe),
             Connector::Payjustnow => Ok(connector_data.payjustnow),
+            Connector::Axia => Ok(connector_data.axia),
         }
     }
 }

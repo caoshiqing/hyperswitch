@@ -604,6 +604,7 @@ impl TryFrom<&TrustpayRouterData<&PaymentsAuthorizeRouterData>> for TrustpayPaym
             | PaymentMethodData::GiftCard(_)
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("trustpay"),
@@ -949,8 +950,11 @@ fn handle_bank_redirects_error_response(
     };
     let error = Some(ErrorResponse {
         code: response.payment_result_info.result_code.to_string(),
-        // message vary for the same code, so relying on code alone as it is unique
-        message: response.payment_result_info.result_code.to_string(),
+        message: response
+            .payment_result_info
+            .additional_info
+            .clone()
+            .unwrap_or_else(|| consts::NO_ERROR_MESSAGE.to_string()),
         reason: response.payment_result_info.additional_info,
         status_code,
         attempt_status: Some(status),
@@ -1775,8 +1779,11 @@ fn handle_bank_redirects_refund_sync_error_response(
 ) -> (Option<ErrorResponse>, RefundsResponseData) {
     let error = Some(ErrorResponse {
         code: response.payment_result_info.result_code.to_string(),
-        // message vary for the same code, so relying on code alone as it is unique
-        message: response.payment_result_info.result_code.to_string(),
+        message: response
+            .payment_result_info
+            .additional_info
+            .clone()
+            .unwrap_or_else(|| consts::NO_ERROR_MESSAGE.to_string()),
         reason: response.payment_result_info.additional_info,
         status_code,
         attempt_status: None,

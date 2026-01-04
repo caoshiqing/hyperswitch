@@ -344,6 +344,7 @@ impl TryFrom<&SetupMandateRouterData> for BankOfAmericaPaymentsRequest {
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("BankOfAmerica"),
@@ -413,6 +414,7 @@ impl<F, T>
                     | common_enums::PaymentMethod::Upi
                     | common_enums::PaymentMethod::Voucher
                     | common_enums::PaymentMethod::OpenBanking
+                    | common_enums::PaymentMethod::VaultDataCard
                     | common_enums::PaymentMethod::GiftCard => None,
                 };
 
@@ -1144,6 +1146,7 @@ impl TryFrom<&BankOfAmericaRouterData<&PaymentsAuthorizeRouterData>>
                     | PaymentMethodData::OpenBanking(_)
                     | PaymentMethodData::CardToken(_)
                     | PaymentMethodData::NetworkToken(_)
+                    | PaymentMethodData::VaultDataCard(_)
                     | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                         Err(errors::ConnectorError::NotImplemented(
                             utils::get_unimplemented_payment_method_error_message(
@@ -1705,6 +1708,7 @@ impl TryFrom<PaymentsResponseRouterData<BankOfAmericaPaymentsResponse>>
                     | common_enums::PaymentMethod::Upi
                     | common_enums::PaymentMethod::Voucher
                     | common_enums::PaymentMethod::OpenBanking
+                    | common_enums::PaymentMethod::VaultDataCard
                     | common_enums::PaymentMethod::GiftCard => None,
                 };
 
@@ -1876,6 +1880,7 @@ impl TryFrom<PaymentsSyncResponseRouterData<BankOfAmericaTransactionResponse>>
                     | common_enums::PaymentMethod::Upi
                     | common_enums::PaymentMethod::Voucher
                     | common_enums::PaymentMethod::OpenBanking
+                    | common_enums::PaymentMethod::VaultDataCard
                     | common_enums::PaymentMethod::GiftCard => None,
                 };
 

@@ -206,6 +206,7 @@ impl TryFrom<&PaymentMethodData> for CeleroPaymentMethod {
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::MobilePayment(_) => Err(errors::ConnectorError::NotImplemented(
                 "Selected payment method through celero".to_string(),
             )
