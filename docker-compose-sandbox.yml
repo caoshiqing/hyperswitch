@@ -281,9 +281,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
 
-  networks:
-    router_net:
-      driver: bridge
-        ipam:
-          config:
-            - subnet: 10.0.0.0/24
+networks:
+  router_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
