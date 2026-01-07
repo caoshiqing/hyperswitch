@@ -36,7 +36,7 @@ use hyperswitch_domain_models::payments::payment_intent::CustomerData;
 use hyperswitch_domain_models::{
     mandates::MandateData,
     merchant_connector_account::ExternalVaultConnectorMetadata,
-    payment_method_data::{GetPaymentMethodType, PaymentMethodData, PazeWalletData},
+    payment_method_data::{GetPaymentMethodType, PazeWalletData},
     payments::{
         self as domain_payments, payment_attempt::PaymentAttempt,
         payment_intent::PaymentIntentFetchConstraints, PaymentIntent,
@@ -70,7 +70,6 @@ use uuid::Uuid;
 use x509_parser::parse_x509_certificate;
 
 use super::{
-    helpers,
     operations::{BoxedOperation, Operation, PaymentResponse},
     CustomerDetails, PaymentData,
 };
@@ -2130,9 +2129,7 @@ impl Default for RolloutConfig {
 
 // Re-export ProxyOverride from hyperswitch_interfaces
 pub use hyperswitch_interfaces::types::ProxyOverride;
-use hyperswitch_interfaces::unified_connector_service::UnifiedConnectorServiceError;
 
-use crate::core::payments::vault_session_v1::generate_vault_session_details;
 
 #[derive(Debug, Clone)]
 pub struct RolloutExecutionResult {
@@ -8600,19 +8597,30 @@ where
         let connector_name =
             external_vault_merchant_connector_account.get_connector_name_as_string();
 
+        let connector_auth_type =   external_vault_merchant_connector_account
+            .get_connector_account_details()
+            .change_context(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("Failed to obtain ConnectorMetadata")?;
+
+
         let external_vault_connector = api_enums::VaultConnectors::from_str(&connector_name)
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Failed to parse Vault connector")?;
 
         let vault_metadata = match external_vault_connector {
             api_enums::VaultConnectors::Vgs => {
-                let vgs_metadata: ExternalVaultConnectorMetadata = external_vault_metadata
+                let mut vgs_metadata: ExternalVaultConnectorMetadata = external_vault_metadata
                     .expose()
                     .parse_value("ExternalVaultConnectorMetadata")
                     .change_context(errors::ApiErrorResponse::InternalServerError)
                     .attach_printable("Failed to parse Vgs connector metadata")?;
-
-                Some(vgs_metadata)
+                if let crate::types::ConnectorAuthType::SignatureKey { api_key, key1, api_secret } = connector_auth_type {
+                    let new_proxy_url = vgs_metadata.proxy_url.replace_host_params(("{vault_id}", api_secret.peek())).set_username_password(api_key.peek(), key1.peek());
+                    vgs_metadata.proxy_url = new_proxy_url;
+                    Some(vgs_metadata)
+                } else {
+                    None
+                }
             }
             api_enums::VaultConnectors::HyperswitchVault | api_enums::VaultConnectors::Tokenex => {
                 None

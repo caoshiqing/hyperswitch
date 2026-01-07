@@ -730,6 +730,22 @@ impl Url {
             .clone();
         Self(url)
     }
+
+    /// Replace placeholder in the host part of the url
+    pub fn replace_host_params(mut self, (place_holder, value): (&str, &str)) -> Self {
+        if let Some(host) = self.0.host_str() {
+            let new_host = host.replace(place_holder, value);
+            // set_host expects Option<&str>, returns Result
+            let _ = self.0.set_host(Some(&new_host));
+        }
+        self
+    }
+    /// set basic username and password
+    pub fn set_username_password(mut self, username: &str,password: &str) -> Self {
+        let _ = self.0.set_username(username);
+        let _ = self.0.set_password(Some(password));
+        self
+    }
 }
 
 impl<DB> ToSql<sql_types::Text, DB> for Url

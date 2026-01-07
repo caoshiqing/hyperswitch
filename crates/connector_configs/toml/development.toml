@@ -7668,6 +7668,19 @@ api_key = "API Key"
   key1="Password"
   api_secret="Vault Id"
 
+[vgs.metadata.proxy_url]
+name="proxy_url"
+label="Outbound Proxy Url"
+placeholder="The URL can contain the placeholder {vault_id}"
+required=true
+type="Text"
+[vgs.metadata.certificate]
+name="certificate"
+label="Certificate"
+placeholder="Base64 encoded PEM formatted certificate chain"
+required=true
+type="Text"
+
 [axia]
 [[axia.credit]]
   payment_method_type = "Mastercard"

@@ -1,5 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
-
+use base64::Engine;
 use actix_web::{web, Scope};
 #[cfg(all(feature = "olap", feature = "v1"))]
 use api_models::routing::RoutingRetrieveQuery;
@@ -36,6 +36,7 @@ use scheduler::SchedulerInterface;
 use storage_impl::{redis::RedisStore, MockDb};
 use tokio::sync::oneshot;
 
+use masking::PeekInterface;
 use self::settings::Tenant;
 #[cfg(any(feature = "olap", feature = "oltp"))]
 use super::currency;
@@ -113,7 +114,10 @@ use crate::{
     configs::{secrets_transformers, Settings},
     db::kafka_store::{KafkaStore, TenantID},
     routes::{hypersense as hypersense_routes, three_ds_decision_rule},
+    consts::BASE64_ENGINE,
 };
+
+
 
 #[derive(Clone)]
 pub struct ReqState {
@@ -276,12 +280,17 @@ impl hyperswitch_interfaces::api_client::ApiClientWrapper for SessionState {
     }
     fn get_proxy(&self) -> hyperswitch_interfaces::types::Proxy {
         if let Some(vault_meta) = &self.external_vault_connector_metadata {
+            let decoded_certificate = String::from_utf8(
+                BASE64_ENGINE
+                    .decode(vault_meta.certificate.peek())
+                    .expect("Failed to decode base64 certificate")
+            ).expect("Certificate is not valid UTF-8");
             hyperswitch_interfaces::types::Proxy {
                 http_url: None,
                 https_url: Some(String::from(vault_meta.proxy_url.get_string_repr())),
                 idle_pool_connection_timeout: None,
                 bypass_proxy_hosts: None,
-                mitm_ca_certificate: Some(vault_meta.certificate.clone()),
+                mitm_ca_certificate: Some(masking::Secret::new(decoded_certificate)),
                 mitm_enabled: Some(true),
             }
         } else {
