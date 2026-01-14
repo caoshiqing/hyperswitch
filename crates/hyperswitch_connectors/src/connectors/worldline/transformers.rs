@@ -246,6 +246,7 @@ impl
                 | PaymentMethodData::OpenBanking(_)
                 | PaymentMethodData::CardToken(_)
                 | PaymentMethodData::NetworkToken(_)
+                | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
                 | PaymentMethodData::VaultDataCard(_)
                 | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                     Err(errors::ConnectorError::NotImplemented(
@@ -404,7 +405,8 @@ fn make_bank_redirect_request(
         | BankRedirectData::Trustly { .. }
         | BankRedirectData::OnlineBankingFpx { .. }
         | BankRedirectData::OnlineBankingThailand { .. }
-        | BankRedirectData::LocalBankRedirect {} => {
+        | BankRedirectData::LocalBankRedirect {}
+        | BankRedirectData::OpenBanking { .. } => {
             return Err(errors::ConnectorError::NotImplemented(
                 utils::get_unimplemented_payment_method_error_message("worldline"),
             )

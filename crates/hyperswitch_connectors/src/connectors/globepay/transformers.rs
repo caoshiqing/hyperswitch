@@ -109,6 +109,7 @@ impl TryFrom<&GlobepayRouterData<&types::PaymentsAuthorizeRouterData>> for Globe
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -331,6 +332,7 @@ fn get_error_response(
         status_code,
         attempt_status: None,
         connector_transaction_id: None,
+        connector_response_reference_id: None,
         network_advice_code: None,
         network_decline_code: None,
         network_error_message: None,

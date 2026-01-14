@@ -561,6 +561,7 @@ impl<F> TryFrom<ResponseRouterData<F, VantivSyncResponse, PaymentsSyncData, Paym
                     status_code: item.http_code,
                     attempt_status: None,
                     connector_transaction_id,
+                    connector_response_reference_id: None,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -570,20 +571,25 @@ impl<F> TryFrom<ResponseRouterData<F, VantivSyncResponse, PaymentsSyncData, Paym
             })
         } else {
             let required_conversion_type = common_utils::types::StringMajorUnitForConnector;
-            let minor_amount_captured = item
-                .response
-                .payment_detail
-                .and_then(|details| {
-                    details.amount.map(|amount| {
-                        common_utils::types::AmountConvertor::convert_back(
-                            &required_conversion_type,
-                            amount,
-                            item.data.request.currency,
-                        )
-                    })
-                })
-                .transpose()
-                .change_context(errors::ConnectorError::ResponseHandlingFailed)?;
+            let minor_amount_captured: Option<MinorUnit> =
+                match connector_utils::is_successful_terminal_status(status) {
+                    true => item
+                        .response
+                        .payment_detail
+                        .and_then(|details| {
+                            details.amount.map(|amount| {
+                                common_utils::types::AmountConvertor::convert_back(
+                                    &required_conversion_type,
+                                    amount,
+                                    item.data.request.currency,
+                                )
+                            })
+                        })
+                        .transpose()
+                        .change_context(errors::ConnectorError::ResponseHandlingFailed)?,
+                    false => None,
+                };
+
             Ok(Self {
                 status,
                 response: Ok(PaymentsResponseData::TransactionResponse {
@@ -1500,6 +1506,7 @@ impl TryFrom<PaymentsCaptureResponseRouterData<CnpOnlineResponse>> for PaymentsC
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(capture_response.cnp_txn_id),
+                            connector_response_reference_id: None,
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -1552,6 +1559,7 @@ impl TryFrom<PaymentsCaptureResponseRouterData<CnpOnlineResponse>> for PaymentsC
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: None,
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code,
                         network_error_message,
@@ -1613,6 +1621,7 @@ impl TryFrom<PaymentsCancelResponseRouterData<CnpOnlineResponse>> for PaymentsCa
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(auth_reversal_response.cnp_txn_id),
+                            connector_response_reference_id: None,
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -1666,6 +1675,7 @@ impl TryFrom<PaymentsCancelResponseRouterData<CnpOnlineResponse>> for PaymentsCa
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: None, // Transaction id not created at connector
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code,
                         network_error_message,
@@ -1711,6 +1721,7 @@ impl<F>
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(void_response.cnp_txn_id),
+                            connector_response_reference_id: None,
                             network_advice_code: None,
                             network_decline_code: None,
                             network_error_message: None,
@@ -1747,6 +1758,7 @@ impl<F>
                     status_code: item.http_code,
                     attempt_status: None,
                     connector_transaction_id: None,
+                    connector_response_reference_id: None,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -1793,6 +1805,7 @@ impl TryFrom<RefundsResponseRouterData<Execute, CnpOnlineResponse>> for RefundsR
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: None,
+                            connector_response_reference_id: None,
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -1835,6 +1848,7 @@ impl TryFrom<RefundsResponseRouterData<Execute, CnpOnlineResponse>> for RefundsR
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: None,
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code,
                         network_error_message,
@@ -1938,6 +1952,10 @@ impl<F>
         match (item.response.sale_response.as_ref(), item.response.authorization_response.as_ref()) {
             (Some(sale_response), None) => {
                 let status = get_attempt_status(WorldpayvantivPaymentFlow::Sale, sale_response.response)?;
+                let minor_amount_captured = match connector_utils::is_successful_terminal_status(status) {
+                        true => sale_response.approved_amount,
+                        false => None,
+                    };
 
                 // While making an authorize flow call to WorldpayVantiv, if Account Updater is enabled then we well get new card token info in response.
                 // We are extracting that new card token info here to be sent back in mandate_id in router_data.
@@ -1991,6 +2009,7 @@ impl<F>
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(sale_response.cnp_txn_id.clone()),
+                            connector_response_reference_id: None,
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -2038,7 +2057,7 @@ impl<F>
                         }),
                         connector_response,
                         amount_captured: sale_response.approved_amount.map(MinorUnit::get_amount_as_i64),
-                        minor_amount_captured: sale_response.approved_amount,
+                        minor_amount_captured,
                         ..item.data
                     })
                 }
@@ -2051,6 +2070,10 @@ impl<F>
                 };
 
                 let status = get_attempt_status(payment_flow_type, auth_response.response)?;
+                let minor_amount_captured = match connector_utils::is_successful_terminal_status(status){
+                        true => auth_response.approved_amount,
+                        false => None,
+                    };
                 if connector_utils::is_payment_failure(status) {
                     let network_decline_code = item
                     .response
@@ -2077,6 +2100,7 @@ impl<F>
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(auth_response.cnp_txn_id.clone()),
+                            connector_response_reference_id: Some(auth_response.order_id.clone()),
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -2128,11 +2152,7 @@ impl<F>
                         } else {
                             None
                         },
-                        minor_amount_captured: if payment_flow_type == WorldpayvantivPaymentFlow::Sale {
-                            auth_response.approved_amount
-                        } else {
-                            None
-                        },
+                        minor_amount_captured,
                         ..item.data
                     })
                 }
@@ -2147,6 +2167,7 @@ impl<F>
                     status_code: item.http_code,
                     attempt_status: None,
                     connector_transaction_id: None, // Transaction id not created at connector
+                    connector_response_reference_id: None,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -2207,6 +2228,7 @@ impl<F>
                             status_code: item.http_code,
                             attempt_status: None,
                             connector_transaction_id: Some(auth_response.order_id.clone()),
+                            connector_response_reference_id: Some(auth_response.order_id.clone()),
                             network_advice_code: None,
                             network_decline_code,
                             network_error_message,
@@ -2277,6 +2299,7 @@ impl<F>
                     status_code: item.http_code,
                     attempt_status: None,
                     connector_transaction_id: None,
+                    connector_response_reference_id: None,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -2395,6 +2418,7 @@ impl TryFrom<RefundsResponseRouterData<RSync, VantivSyncResponse>> for RefundsRo
                     status_code: item.http_code,
                     attempt_status: None,
                     connector_transaction_id,
+                    connector_response_reference_id: None,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -4744,6 +4768,7 @@ impl
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: None,
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -4786,6 +4811,7 @@ impl
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: None,
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,

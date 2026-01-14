@@ -259,7 +259,8 @@ impl TryFrom<&SetupMandateRouterData> for WellsfargoZeroMandateRequest {
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
             | PaymentMethodData::VaultDataCard(_)
-            | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
+            | PaymentMethodData::CardDetailsForNetworkTransactionId(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Wellsfargo"),
                 ))?
@@ -925,6 +926,12 @@ impl
             hyperswitch_domain_models::payment_method_data::Card,
         ),
     ) -> Result<Self, Self::Error> {
+        if item.router_data.is_three_ds() {
+            Err(errors::ConnectorError::NotSupported {
+                message: "Cards 3DS".to_string(),
+                connector: "Wellsfargo",
+            })?
+        }
         let email = item.router_data.request.get_email()?;
         let bill_to = build_bill_to(item.router_data.get_optional_billing(), email)?;
         let order_information = OrderInformationWithBill::from((item, Some(bill_to)));
@@ -1198,12 +1205,6 @@ impl TryFrom<&WellsfargoRouterData<&PaymentsAuthorizeRouterData>> for Wellsfargo
     fn try_from(
         item: &WellsfargoRouterData<&PaymentsAuthorizeRouterData>,
     ) -> Result<Self, Self::Error> {
-        if item.router_data.is_three_ds() {
-            Err(errors::ConnectorError::NotSupported {
-                message: "Cards 3DS".to_string(),
-                connector: "Wellsfargo",
-            })?
-        }
         match item.router_data.request.connector_mandate_id() {
             Some(connector_mandate_id) => Self::try_from((item, connector_mandate_id)),
             None => {
@@ -1368,6 +1369,7 @@ impl TryFrom<&WellsfargoRouterData<&PaymentsAuthorizeRouterData>> for Wellsfargo
                     | PaymentMethodData::OpenBanking(_)
                     | PaymentMethodData::CardToken(_)
                     | PaymentMethodData::NetworkToken(_)
+                    | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
                     | PaymentMethodData::VaultDataCard(_)
                     | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                         Err(errors::ConnectorError::NotImplemented(
@@ -2416,6 +2418,7 @@ pub fn get_error_response(
         status_code,
         attempt_status,
         connector_transaction_id: Some(transaction_id.clone()),
+        connector_response_reference_id: None,
         network_advice_code: None,
         network_decline_code: None,
         network_error_message: None,

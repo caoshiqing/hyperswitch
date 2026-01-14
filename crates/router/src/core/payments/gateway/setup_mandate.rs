@@ -84,6 +84,7 @@ where
             unified_connector_service::build_unified_connector_service_auth_metadata(
                 merchant_connector_account,
                 &platform,
+                router_data.connector.clone(),
             )
             .change_context(ConnectorError::RequestEncodingFailed)
             .attach_printable("Failed to construct request metadata")?;
@@ -102,7 +103,7 @@ where
             .external_vault_proxy_metadata(None)
             .merchant_reference_id(merchant_reference_id)
             .lineage_ids(lineage_ids);
-        let updated_router_data = Box::pin(unified_connector_service::ucs_logging_wrapper_new(
+        Box::pin(unified_connector_service::ucs_logging_wrapper_granular(
             router_data.clone(),
             state,
             setup_mandate_request,
@@ -123,11 +124,19 @@ where
                 )
                 .attach_printable("Failed to deserialize UCS response")?;
 
-                let router_data_response =
-                    ucs_data.router_data_response.map(|(response, status)| {
+                let router_data_response = match ucs_data.router_data_response {
+                    Ok((response, status)) => {
                         router_data.status = status;
-                        response
-                    });
+                        Ok(response)
+                    }
+                    Err(err) => {
+                        logger::debug!("Error in UCS router data response");
+                        if let Some(attempt_status) = err.attempt_status {
+                            router_data.status = attempt_status;
+                        }
+                        Err(err)
+                    }
+                };
                 router_data.response = router_data_response;
                 router_data.connector_http_status_code = Some(ucs_data.status_code);
 
@@ -136,13 +145,12 @@ where
                     router_data.connector_customer = Some(connector_customer_id);
                 });
 
-                Ok((router_data, setup_mandate_response))
+                Ok((router_data, (), setup_mandate_response))
             },
         ))
         .await
-        .change_context(ConnectorError::ResponseHandlingFailed)?;
-
-        Ok(updated_router_data)
+        .map(|(router_data, _)| router_data)
+        .change_context(ConnectorError::ResponseHandlingFailed)
     }
 }
 

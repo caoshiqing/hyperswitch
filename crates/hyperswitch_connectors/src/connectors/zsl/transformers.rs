@@ -191,6 +191,7 @@ impl TryFrom<&ZslRouterData<&types::PaymentsAuthorizeRouterData>> for ZslPayment
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::OpenBanking(_) => Err(errors::ConnectorError::NotImplemented(
                 get_unimplemented_payment_method_error_message(item.router_data.connector.as_str()),
@@ -356,6 +357,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, ZslPaymentsResponse, T, PaymentsRespons
                         status_code: item.http_code,
                         attempt_status: Some(enums::AttemptStatus::Failure),
                         connector_transaction_id: Some(item.response.mer_ref.clone()),
+                        connector_response_reference_id: Some(item.response.mer_ref.clone()),
                         network_advice_code: None,
                         network_decline_code: None,
                         network_error_message: None,
@@ -376,6 +378,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, ZslPaymentsResponse, T, PaymentsRespons
                     status_code: item.http_code,
                     attempt_status: Some(enums::AttemptStatus::Failure),
                     connector_transaction_id: Some(item.response.mer_ref.clone()),
+                    connector_response_reference_id: Some(item.response.mer_ref.clone()),
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -458,6 +461,7 @@ impl<F> TryFrom<ResponseRouterData<F, ZslWebhookResponse, PaymentsSyncData, Paym
                     status_code: item.http_code,
                     attempt_status: Some(enums::AttemptStatus::Failure),
                     connector_transaction_id: Some(item.response.mer_ref.clone()),
+                    connector_response_reference_id: Some(item.response.mer_ref.clone()),
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,

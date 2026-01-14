@@ -282,6 +282,7 @@ pub trait ConnectorIntegration<T, Req, Resp>:
             status_code: res.status_code,
             attempt_status: None,
             connector_transaction_id: None,
+            connector_response_reference_id: None,
             network_advice_code: None,
             network_decline_code: None,
             network_error_message: None,
@@ -374,6 +375,7 @@ pub trait ConnectorCommon {
             reason: None,
             attempt_status: None,
             connector_transaction_id: None,
+            connector_response_reference_id: None,
             network_advice_code: None,
             network_decline_code: None,
             network_error_message: None,
@@ -400,6 +402,14 @@ pub enum CurrentFlowInfo<'a> {
     CompleteAuthorize {
         /// The payment authorize request data
         request_data: &'a router_request_types::CompleteAuthorizeData,
+        /// The payment method that is used
+        payment_method: Option<PaymentMethod>,
+    },
+
+    /// SetupMandate flow information
+    SetupMandate {
+        /// The authentication type being used
+        auth_type: &'a enums::AuthenticationType,
     },
 }
 
@@ -417,9 +427,9 @@ pub enum AlternateFlow {
 /// Or PostAuthenticate flow must be made before CompleteAuthorize flow for cybersource.
 #[derive(Debug, Clone, Copy)]
 pub enum PreProcessingFlowName {
-    /// Authentication flow must be made before the actual flow
+    /// Authentication flow
     Authenticate,
-    /// Post-authentication flow must be made before the actual flow
+    /// Post-authentication flow
     PostAuthenticate,
 }
 
@@ -434,23 +444,28 @@ pub struct PreProcessingFlowResponse<'a> {
 
 /// The trait that provides specifications about the connector
 pub trait ConnectorSpecifications {
+    /// Check if pre-authentication flow is required
+    fn is_order_create_flow_required(&self, _current_flow: CurrentFlowInfo<'_>) -> bool {
+        false
+    }
+    /// Check if pre-authentication flow is required
+    fn is_pre_authentication_flow_required(&self, _current_flow: CurrentFlowInfo<'_>) -> bool {
+        false
+    }
+    /// Check if authentication flow is required
+    fn is_authentication_flow_required(&self, _current_flow: CurrentFlowInfo<'_>) -> bool {
+        false
+    }
+    /// Check if post-authentication flow is required
+    fn is_post_authentication_flow_required(&self, _current_flow: CurrentFlowInfo<'_>) -> bool {
+        false
+    }
     /// Preprocessing flow name if any, that must be made before the current flow.
     fn get_preprocessing_flow_if_needed(
         &self,
         _current_flow: CurrentFlowInfo<'_>,
     ) -> Option<PreProcessingFlowName> {
         None
-    }
-    /// Based on the current flow and preprocessing_flow_response, decide if the main flow must be called or not
-    ///
-    /// By default, always continue with the main flow after the preprocessing flow.
-    fn decide_should_continue_after_preprocessing(
-        &self,
-        _current_flow: CurrentFlowInfo<'_>,
-        _pre_processing_flow_name: PreProcessingFlowName,
-        _preprocessing_flow_response: PreProcessingFlowResponse<'_>,
-    ) -> bool {
-        true
     }
     /// If Some is returned, the returned api flow must be made instead of the current flow.
     fn get_alternate_flow_if_needed(
@@ -570,6 +585,13 @@ pub trait ConnectorSpecifications {
     /// Check if connector needs tokenization call before setup mandate flow
     fn should_call_tokenization_before_setup_mandate(&self) -> bool {
         true
+    }
+
+    /// Get connector's API webhook configuration object
+    fn get_api_webhook_config(
+        &self,
+    ) -> &'static common_types::connector_webhook_configuration::WebhookSetupCapabilities {
+        &consts::DEFAULT_WEBHOOK_SETUP_CAPABILITIES
     }
 }
 

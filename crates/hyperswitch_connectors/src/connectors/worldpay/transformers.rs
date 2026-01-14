@@ -205,6 +205,7 @@ fn fetch_payment_instrument(
         | PaymentMethodData::GiftCard(_)
         | PaymentMethodData::OpenBanking(_)
         | PaymentMethodData::CardToken(_)
+        | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
         | PaymentMethodData::VaultDataCard(_)
         | PaymentMethodData::NetworkToken(_) => Err(errors::ConnectorError::NotImplemented(
             utils::get_unimplemented_payment_method_error_message("worldpay"),
@@ -799,7 +800,8 @@ impl<F, T>
                 reason: Some(reason),
                 status_code: router_data.http_code,
                 attempt_status: Some(status),
-                connector_transaction_id: optional_correlation_id,
+                connector_transaction_id: optional_correlation_id.clone(),
+                connector_response_reference_id: optional_correlation_id,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -811,7 +813,8 @@ impl<F, T>
                 reason: Some(message.clone()),
                 status_code: router_data.http_code,
                 attempt_status: Some(status),
-                connector_transaction_id: optional_correlation_id,
+                connector_transaction_id: optional_correlation_id.clone(),
+                connector_response_reference_id: optional_correlation_id,
                 network_advice_code: advice_code,
                 // Access Worldpay returns a raw response code in the refusalCode field (if enabled) containing the unmodified response code received either directly from the card scheme for Worldpay-acquired transactions, or from third party acquirers.
                 // You can use raw response codes to inform your retry logic. A rawCode is only returned if specifically requested.
@@ -834,7 +837,10 @@ impl TryFrom<(&types::PaymentsCaptureRouterData, MinorUnit)> for WorldpayPartial
     fn try_from(req: (&types::PaymentsCaptureRouterData, MinorUnit)) -> Result<Self, Self::Error> {
         let (item, amount) = req;
         Ok(Self {
-            reference: item.payment_id.clone().replace("_", "-"),
+            reference: item
+                .connector_request_reference_id
+                .clone()
+                .replace("_", "-"),
             value: PaymentValue {
                 amount: amount.get_amount_as_i64(),
                 currency: item.request.currency,

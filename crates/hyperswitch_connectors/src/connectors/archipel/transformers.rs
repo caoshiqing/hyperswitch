@@ -794,6 +794,7 @@ impl TryFrom<ArchipelRouterData<&PaymentsAuthorizeRouterData>>
             | PaymentMethodData::CardToken(..)
             | PaymentMethodData::OpenBanking(..)
             | PaymentMethodData::NetworkToken(..)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(..)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::MobilePayment(..) => Err(errors::ConnectorError::NotImplemented(
                 utils::get_unimplemented_payment_method_error_message("Archipel"),
@@ -847,6 +848,7 @@ impl TryFrom<ArchipelRouterData<&PaymentsAuthorizeRouterData>>
             }
             PaymentMethodData::Card(..)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(..)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::CardRedirect(..)
             | PaymentMethodData::PayLater(..)
             | PaymentMethodData::BankRedirect(..)
@@ -1421,6 +1423,7 @@ impl From<ArchipelErrorMessageWithHttpCode> for ErrorResponse {
             code: error_message.code,
             attempt_status: None,
             connector_transaction_id: None,
+            connector_response_reference_id: None,
             message: error_message
                 .description
                 .clone()

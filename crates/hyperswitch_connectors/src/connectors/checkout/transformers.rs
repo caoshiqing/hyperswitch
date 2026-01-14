@@ -169,6 +169,7 @@ impl TryFrom<&TokenizationRouterData> for TokenRequest {
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -1139,6 +1140,7 @@ impl TryFrom<PaymentsResponseRouterData<PaymentsResponse>> for PaymentsAuthorize
                 reason: item.response.response_summary,
                 attempt_status: None,
                 connector_transaction_id: Some(item.response.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -1273,6 +1275,7 @@ impl
                 reason: item.response.response_summary,
                 attempt_status: None,
                 connector_transaction_id: Some(item.response.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code,
                 network_decline_code: None,
                 network_error_message: None,
@@ -1342,6 +1345,7 @@ impl TryFrom<PaymentsSyncResponseRouterData<PaymentsResponse>> for PaymentsSyncR
                 reason: item.response.response_summary,
                 attempt_status: None,
                 connector_transaction_id: Some(item.response.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,

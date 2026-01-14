@@ -10,7 +10,7 @@ const successfulNo3DSCardDetails = {
 };
 
 const successfulThreeDSTestCardDetails = {
-  card_number: "4242424242424242",
+  card_number: "5555555555554444",
   card_exp_month: "01",
   card_exp_year: "28",
   card_holder_name: "Joseph",
@@ -37,7 +37,8 @@ const multiUseMandateData = {
   },
 };
 
-const billingAddress = {
+// Base billing address structure
+const baseBillingAddress = {
   address: {
     line1: "1467",
     line2: "Harrison Street",
@@ -45,13 +46,71 @@ const billingAddress = {
     state: "California",
     zip: "94122",
     country: "US",
-    first_name: "Test",
-    last_name: "User",
+    first_name: "John",
+    last_name: "Doe",
   },
   phone: {
     number: "9123456789",
     country_code: "+1",
   },
+};
+
+const billingAddress = {
+  ...baseBillingAddress,
+  address: {
+    ...baseBillingAddress.address,
+    first_name: "Test",
+    last_name: "User",
+  },
+};
+
+const billingAddressNL = {
+  ...baseBillingAddress,
+  address: {
+    ...baseBillingAddress.address,
+    country: "NL",
+  },
+  phone: {
+    ...baseBillingAddress.phone,
+    country_code: "+31",
+  },
+};
+
+const billingAddressAT = {
+  ...baseBillingAddress,
+  address: {
+    ...baseBillingAddress.address,
+    country: "AT",
+  },
+  phone: {
+    ...baseBillingAddress.phone,
+    country_code: "+43",
+  },
+};
+
+const billingAddressDE = {
+  ...baseBillingAddress,
+  address: {
+    ...baseBillingAddress.address,
+    country: "DE",
+  },
+  phone: {
+    ...baseBillingAddress.phone,
+    country_code: "+49",
+  },
+};
+
+const billingAddressPL = {
+  ...baseBillingAddress,
+  address: {
+    ...baseBillingAddress.address,
+    country: "PL",
+  },
+  phone: {
+    ...baseBillingAddress.phone,
+    country_code: "+48",
+  },
+  email: "test@example.com",
 };
 
 export const connectorDetails = {
@@ -116,22 +175,14 @@ export const connectorDetails = {
         setup_future_usage: "on_session",
       },
       Response: {
-        status: 400,
+        status: 200,
         body: {
-          error: {
-            code: "IR_19",
-            message: "Payment method type not supported",
-            reason: "3DS flow is not supported by Mollie",
-            type: "invalid_request",
-          },
+          status: "requires_customer_action",
         },
       },
     },
     // 3DS automatic capture
     "3DSAutoCapture": {
-      config: {
-        TRIGGER_SKIP: true,
-      },
       Request: {
         payment_method: "card",
         payment_method_data: {
@@ -143,14 +194,9 @@ export const connectorDetails = {
         setup_future_usage: "on_session",
       },
       Response: {
-        status: 400,
+        status: 200,
         body: {
-          error: {
-            code: "IR_19",
-            message: "Payment method type not supported",
-            reason: "3DS flow is not supported by Mollie",
-            type: "invalid_request",
-          },
+          status: "requires_customer_action",
         },
       },
     },
@@ -229,26 +275,15 @@ export const connectorDetails = {
         },
       },
     },
-    Void: getCustomExchange({
+    Void: {
       Request: {},
       Response: {
-        status: 400,
-        body: {
-          error: {
-            code: "IR_20",
-            message: "Void flow not supported",
-            connector: "mollie",
-            type: "invalid_request",
-          },
-        },
-      },
-      ResponseCustom: {
         status: 200,
         body: {
           status: "cancelled",
         },
       },
-    }),
+    },
     VoidAfterConfirm: {
       Request: {},
       Response: {
@@ -274,7 +309,10 @@ export const connectorDetails = {
         },
       },
     },
-    PartialRefund: getCustomExchange({
+    PartialRefund: {
+      Configs: {
+        TRIGGER_SKIP: true,
+      },
       Request: {
         amount: 2000,
       },
@@ -284,13 +322,7 @@ export const connectorDetails = {
           status: "pending",
         },
       },
-      ResponseCustom: {
-        status: 200,
-        body: {
-          status: "failed",
-        },
-      },
-    }),
+    },
     manualPaymentRefund: {
       Request: {
         amount: 6000,
@@ -302,7 +334,10 @@ export const connectorDetails = {
         },
       },
     },
-    manualPaymentPartialRefund: getCustomExchange({
+    manualPaymentPartialRefund: {
+      Configs: {
+        TRIGGER_SKIP: true,
+      },
       Request: {
         amount: 2000,
       },
@@ -310,15 +345,10 @@ export const connectorDetails = {
         status: 200,
         body: {
           status: "pending",
+          reason: "FRAUD",
         },
       },
-      ResponseCustom: {
-        status: 200,
-        body: {
-          status: "failed",
-        },
-      },
-    }),
+    },
     SyncRefund: getCustomExchange({
       Request: {},
       Response: {
@@ -331,6 +361,7 @@ export const connectorDetails = {
         status: 200,
         body: {
           status: "failed",
+          reason: "FRAUD",
         },
       },
     }),
@@ -340,15 +371,14 @@ export const connectorDetails = {
         payment_method_data: {
           card: successfulNo3DSCardDetails,
         },
+        currency: "USD",
+        setup_future_usage: "off_session",
+        customer_acceptance: customerAcceptance,
       },
       Response: {
-        status: 400,
+        status: 200,
         body: {
-          error: {
-            code: "IR_04",
-            message: "Missing required param: payment_method_token",
-            type: "invalid_request",
-          },
+          status: "succeeded",
         },
       },
     },
@@ -436,6 +466,23 @@ export const connectorDetails = {
         },
       },
     },
+    SaveCardUse3DSAutoCaptureOffSession: {
+      Request: {
+        payment_method: "card",
+        payment_method_type: "debit",
+        payment_method_data: {
+          card: successfulThreeDSTestCardDetails,
+        },
+        setup_future_usage: "off_session",
+        customer_acceptance: customerAcceptance,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
+      },
+    },
     SaveCardConfirmManualCaptureOffSession: {
       Request: {
         setup_future_usage: "off_session",
@@ -448,9 +495,6 @@ export const connectorDetails = {
       },
     },
     SaveCardUseNo3DSAutoCaptureOffSession: {
-      Configs: {
-        TRIGGER_SKIP: true,
-      },
       Request: {
         payment_method: "card",
         payment_method_type: "debit",
@@ -475,6 +519,7 @@ export const connectorDetails = {
         },
         currency: "USD",
         mandate_data: singleUseMandateData,
+        customer_acceptance: customerAcceptance,
       },
       Response: {
         status: 200,
@@ -498,14 +543,11 @@ export const connectorDetails = {
       Response: {
         status: 200,
         body: {
-          status: "requires_capture",
+          status: "succeeded",
         },
       },
     },
     MandateMultiUseNo3DSAutoCapture: {
-      Configs: {
-        TRIGGER_SKIP: true,
-      },
       Request: {
         payment_method: "card",
         payment_method_data: {
@@ -513,6 +555,7 @@ export const connectorDetails = {
         },
         currency: "USD",
         mandate_data: multiUseMandateData,
+        customer_acceptance: customerAcceptance,
       },
       Response: {
         status: 200,
@@ -532,6 +575,7 @@ export const connectorDetails = {
         },
         currency: "USD",
         mandate_data: singleUseMandateData,
+        customer_acceptance: customerAcceptance,
       },
       Response: {
         status: 200,
@@ -590,7 +634,7 @@ export const connectorDetails = {
     },
     PaymentIntentOffSession: {
       Request: {
-        currency: "EUR",
+        currency: "USD",
         amount: 6000,
         authentication_type: "no_three_ds",
         customer_acceptance: null,
@@ -604,35 +648,184 @@ export const connectorDetails = {
         },
       },
     },
-  },
-  SaveCardConfirmAutoCaptureOffSession: {
-    Request: {},
-    Response: {
-      status: 200,
-      body: {
-        status: "succeeded",
+    MITManualCapture: {
+      Request: {
+        currency: "USD",
+        description: "Test Payment",
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "succeeded",
+        },
+      },
+    },
+    MITWithoutBillingAddress: {
+      Request: {
+        description: "Test Payment",
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "succeeded",
+        },
+      },
+    },
+    PaymentMethodIdMandate3DSAutoCapture: {
+      Request: {
+        payment_method: "card",
+        payment_method_data: {
+          card: successfulThreeDSTestCardDetails,
+        },
+        currency: "USD",
+        mandate_data: singleUseMandateData,
+        authentication_type: "three_ds",
+        customer_acceptance: customerAcceptance,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
+      },
+    },
+    PaymentMethodIdMandate3DSManualCapture: {
+      Configs: {
+        TRIGGER_SKIP: true,
+      },
+      Request: {
+        payment_method: "card",
+        payment_method_data: {
+          card: successfulThreeDSTestCardDetails,
+        },
+        currency: "USD",
+        mandate_data: null,
+        authentication_type: "three_ds",
+        customer_acceptance: customerAcceptance,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
+      },
+    },
+    SaveCardConfirmAutoCaptureOffSession: {
+      Request: {
+        currency: "USD",
+        authentication_type: "no_three_ds",
+        setup_future_usage: "off_session",
+        customer_acceptance: null,
+        capture_method: "automatic",
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "succeeded",
+        },
       },
     },
   },
-  MITManualCapture: {
-    Request: {
-      currency: "EUR",
-    },
-    Response: {
-      status: 200,
-      body: {
-        status: "succeeded",
+  bank_redirect_pm: {
+    Ideal: {
+      Request: {
+        payment_method: "bank_redirect",
+        payment_method_type: "ideal",
+        payment_method_data: {
+          bank_redirect: {
+            ideal: {
+              bank_name: "ing",
+            },
+          },
+        },
+        billing: billingAddressNL,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
       },
     },
-  },
-  MITWithoutBillingAddress: {
-    Request: {
-      description: "Test Payment",
+    Eps: {
+      Request: {
+        payment_method: "bank_redirect",
+        payment_method_type: "eps",
+        payment_method_data: {
+          bank_redirect: {
+            eps: {
+              bank_name: "ing",
+            },
+          },
+        },
+        billing: billingAddressAT,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
+      },
     },
-    Response: {
-      status: 200,
-      body: {
-        status: "succeeded",
+    Giropay: {
+      Request: {
+        payment_method: "bank_redirect",
+        payment_method_type: "giropay",
+        payment_method_data: {
+          bank_redirect: {
+            giropay: {},
+          },
+        },
+        billing: billingAddressDE,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
+      },
+    },
+    Sofort: {
+      Request: {
+        payment_method: "bank_redirect",
+        payment_method_type: "sofort",
+        payment_method_data: {
+          bank_redirect: {
+            sofort: {
+              country: "DE",
+              preferred_language: "en",
+            },
+          },
+        },
+        billing: billingAddressDE,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "failed",
+          error_code: "Unprocessable Entity",
+          error_message: "method",
+        },
+      },
+    },
+    Przelewy24: {
+      Request: {
+        payment_method: "bank_redirect",
+        payment_method_type: "przelewy24",
+        payment_method_data: {
+          bank_redirect: {
+            przelewy24: {
+              bank_name: "ing",
+            },
+          },
+        },
+        billing: billingAddressPL,
+      },
+      Response: {
+        status: 200,
+        body: {
+          status: "requires_customer_action",
+        },
       },
     },
   },

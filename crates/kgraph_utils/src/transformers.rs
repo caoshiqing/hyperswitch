@@ -106,6 +106,7 @@ impl IntoDirValue for api_enums::PaymentMethod {
             Self::OpenBanking => Ok(dirval!(PaymentMethod = OpenBanking)),
             Self::MobilePayment => Ok(dirval!(PaymentMethod = MobilePayment)),
             Self::VaultDataCard => Ok(dirval!(PaymentMethod = VaultDataCard)),
+            Self::NetworkToken => Ok(dirval!(PaymentMethod = NetworkToken)),
         }
     }
 }
@@ -172,6 +173,7 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::MobilePayment
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
+                | api_enums::PaymentMethod::NetworkToken
                 | api_enums::PaymentMethod::GiftCard
                 | api_enums::PaymentMethod::VaultDataCard => {
                     Err(KgraphError::ContextConstructionError(Box::new(
@@ -195,6 +197,7 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
                 | api_enums::PaymentMethod::Voucher
                 | api_enums::PaymentMethod::OpenBanking
                 | api_enums::PaymentMethod::GiftCard
+                | api_enums::PaymentMethod::NetworkToken
                 | api_enums::PaymentMethod::VaultDataCard => {
                     Err(KgraphError::ContextConstructionError(Box::new(
                         AnalysisErrorType::NotSupported,
@@ -295,6 +298,7 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
             api_enums::PaymentMethodType::InstantBankTransferPoland => {
                 Ok(dirval!(BankTransferType = InstantBankTransferPoland))
             }
+            api_enums::PaymentMethodType::Qris => Ok(dirval!(RealTimePaymentType = Qris)),
             api_enums::PaymentMethodType::PermataBankTransfer => {
                 Ok(dirval!(BankTransferType = PermataBankTransfer))
             }
@@ -334,6 +338,12 @@ impl IntoDirValue for (api_enums::PaymentMethodType, api_enums::PaymentMethod) {
             }
             api_enums::PaymentMethodType::IndonesianBankTransfer => {
                 Ok(dirval!(BankTransferType = IndonesianBankTransfer))
+            }
+            api_enums::PaymentMethodType::OpenBanking => {
+                Ok(dirval!(BankRedirectType = OpenBanking))
+            }
+            api_enums::PaymentMethodType::NetworkToken => {
+                Ok(dirval!(NetworkTokenType = NetworkToken))
             }
         }
     }

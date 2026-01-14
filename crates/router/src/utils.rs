@@ -321,6 +321,8 @@ pub async fn find_mca_from_authentication_id_type(
             .find_authentication_by_merchant_id_authentication_id(
                 platform.get_processor().get_account().get_id(),
                 &authentication_id,
+                platform.get_processor().get_key_store(),
+                &state.into(),
             )
             .await
             .to_not_found_response(errors::ApiErrorResponse::InternalServerError)?,
@@ -328,6 +330,8 @@ pub async fn find_mca_from_authentication_id_type(
             db.find_authentication_by_merchant_id_connector_authentication_id(
                 platform.get_processor().get_account().get_id().clone(),
                 connector_authentication_id,
+                platform.get_processor().get_key_store(),
+                &state.into(),
             )
             .await
             .to_not_found_response(errors::ApiErrorResponse::InternalServerError)?
@@ -668,6 +672,7 @@ pub fn handle_json_response_deserialization_failure(
                 reason: Some(response_data),
                 attempt_status: None,
                 connector_transaction_id: None,
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -1119,7 +1124,8 @@ pub fn check_if_pull_mechanism_for_external_3ds_enabled_from_connector_metadata(
 #[cfg(feature = "v2")]
 #[allow(clippy::too_many_arguments)]
 pub async fn trigger_payments_webhook<F, Op, D>(
-    platform: &domain::Platform,
+    processor: &domain::Processor,
+    initiator: Option<&domain::Initiator>,
     business_profile: domain::Profile,
     payment_data: D,
     customer: Option<domain::Customer>,
@@ -1137,7 +1143,8 @@ where
 #[cfg(feature = "v1")]
 #[allow(clippy::too_many_arguments)]
 pub async fn trigger_payments_webhook<F, Op, D>(
-    platform: domain::Platform,
+    processor: &domain::Processor,
+    initiator: Option<&domain::Initiator>,
     business_profile: domain::Profile,
     payment_data: D,
     customer: Option<domain::Customer>,
@@ -1176,6 +1183,8 @@ where
             None,
             None,
             None,
+            processor,
+            initiator,
         )?;
 
         let event_type = status.into();
@@ -1189,12 +1198,13 @@ where
             // So when server shutdown won't wait for this thread's completion.
 
             if let Some(event_type) = event_type {
+                let cloned_processor = processor.clone();
                 tokio::spawn(
                     async move {
                         let primary_object_created_at = payments_response_json.created;
                         Box::pin(webhooks_core::create_event_and_trigger_outgoing_webhook(
                             cloned_state,
-                            platform.clone(),
+                            cloned_processor,
                             business_profile,
                             event_type,
                             diesel_models::enums::EventClass::Payments,
@@ -1258,14 +1268,14 @@ pub async fn trigger_refund_outgoing_webhook(
         let refund_response: api_models::refunds::RefundResponse = refund.clone().foreign_into();
         let refund_id = refund_response.refund_id.clone();
         let cloned_state = state.clone();
-        let cloned_platform = platform.clone();
         let primary_object_created_at = refund_response.created_at;
         if let Some(outgoing_event_type) = event_type {
+            let processor = platform.get_processor().clone();
             tokio::spawn(
                 async move {
                     Box::pin(webhooks_core::create_event_and_trigger_outgoing_webhook(
                         cloned_state,
-                        cloned_platform,
+                        processor,
                         business_profile,
                         outgoing_event_type,
                         diesel_models::enums::EventClass::Refunds,
@@ -1327,9 +1337,9 @@ pub async fn trigger_payouts_webhook(
     if should_trigger_webhook {
         let event_type = (*status).into();
         if let Some(event_type) = event_type {
-            let cloned_platform = platform.clone();
             let cloned_state = state.clone();
             let cloned_response = payout_response.clone();
+            let processor = platform.get_processor().clone();
 
             // This spawns this futures in a background thread, the exception inside this future won't affect
             // the current thread and the lifecycle of spawn thread is not handled by runtime.
@@ -1339,7 +1349,7 @@ pub async fn trigger_payouts_webhook(
                     let primary_object_created_at = cloned_response.created;
                     Box::pin(webhooks_core::create_event_and_trigger_outgoing_webhook(
                         cloned_state,
-                        cloned_platform,
+                        processor,
                         business_profile,
                         event_type,
                         diesel_models::enums::EventClass::Payouts,
@@ -1390,17 +1400,19 @@ pub async fn trigger_subscriptions_outgoing_webhook(
         key_store.clone(),
         merchant_account.clone(),
         key_store.clone(),
+        None,
     );
 
     let cloned_state = state.clone();
     let cloned_profile = profile.clone();
     let invoice_id = invoice.id.get_string_repr().to_owned();
     let created_at = subscription.created_at;
+    let processor = platform.get_processor().clone();
 
     tokio::spawn(async move {
         Box::pin(webhooks_core::create_event_and_trigger_outgoing_webhook(
             cloned_state,
-            platform,
+            processor,
             cloned_profile,
             common_enums::enums::EventType::InvoicePaid,
             common_enums::enums::EventClass::Subscriptions,

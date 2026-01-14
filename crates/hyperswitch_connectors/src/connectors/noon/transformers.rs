@@ -370,6 +370,7 @@ impl TryFrom<&NoonRouterData<&PaymentsAuthorizeRouterData>> for NoonPaymentsRequ
                     | PaymentMethodData::OpenBanking(_)
                     | PaymentMethodData::CardToken(_)
                     | PaymentMethodData::NetworkToken(_)
+                    | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
                     | PaymentMethodData::VaultDataCard(_)
                     | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                         Err(errors::ConnectorError::NotImplemented(
@@ -605,6 +606,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, NoonPaymentsResponse, T, PaymentsRespon
                     status_code: item.http_code,
                     attempt_status: Some(status),
                     connector_transaction_id: Some(order.id.to_string()),
+                    connector_response_reference_id: order.reference,
                     network_advice_code: None,
                     network_decline_code: None,
                     network_error_message: None,
@@ -839,6 +841,7 @@ impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>> for RefundsRout
                 reason: Some(response.message.clone()),
                 attempt_status: None,
                 connector_transaction_id: Some(response.result.transaction.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -909,6 +912,7 @@ impl TryFrom<RefundsResponseRouterData<RSync, RefundSyncResponse>> for RefundsRo
                 reason: Some(response.message.clone()),
                 attempt_status: None,
                 connector_transaction_id: Some(noon_transaction.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,

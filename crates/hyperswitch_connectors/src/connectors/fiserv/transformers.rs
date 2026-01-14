@@ -701,6 +701,7 @@ impl TryFrom<&FiservRouterData<&types::PaymentsAuthorizeRouterData>> for FiservP
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => Err(
                 error_stack::report!(errors::ConnectorError::NotImplemented(
@@ -940,6 +941,7 @@ pub enum FiservOrderStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum FiservPaymentsResponse {
     Charges(FiservChargesResponse),
     Checkout(FiservCheckoutResponse),

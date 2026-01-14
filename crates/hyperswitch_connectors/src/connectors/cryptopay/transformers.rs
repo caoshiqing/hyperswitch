@@ -89,7 +89,8 @@ impl TryFrom<&CryptopayRouterData<&types::PaymentsAuthorizeRouterData>>
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
             | PaymentMethodData::VaultDataCard(_)
-            | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
+            | PaymentMethodData::CardDetailsForNetworkTransactionId(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("CryptoPay"),
                 ))
@@ -176,6 +177,7 @@ impl<F, T>
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: Some(payment_response.id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,

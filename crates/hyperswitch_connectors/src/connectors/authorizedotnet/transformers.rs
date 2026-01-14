@@ -167,7 +167,6 @@ struct TransactionRequest {
     processing_options: Option<ProcessingOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     subsequent_auth_information: Option<SubsequentAuthInformation>,
-    authorization_indicator_type: Option<AuthorizationIndicator>,
 }
 
 #[derive(Debug, Serialize)]
@@ -260,12 +259,6 @@ pub enum Reason {
     Reauthorization,
     #[serde(rename = "noShow")]
     NoShow,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AuthorizationIndicator {
-    authorization_indicator: AuthorizationType,
 }
 
 #[derive(Debug, Serialize)]
@@ -400,9 +393,15 @@ impl ForeignTryFrom<Value> for Vec<UserField> {
             .attach_printable("")?;
         let mut vector: Self = Self::new();
         for (key, value) in hashmap {
+            let string_value = match value {
+                Value::Bool(boolean) => boolean.to_string(),
+                Value::Number(number) => number.to_string(),
+                Value::String(string) => string.to_string(),
+                _ => value.to_string(),
+            };
             vector.push(UserField {
                 name: key,
-                value: value.to_string(),
+                value: string_value,
             });
         }
         Ok(vector)
@@ -558,6 +557,7 @@ impl TryFrom<&SetupMandateRouterData> for CreateCustomerPaymentProfileRequest {
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -661,6 +661,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, AuthorizedotnetCustomerResponse, T, Pay
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: None,
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code: None,
                         network_error_message: None,
@@ -734,6 +735,7 @@ impl<F, T>
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: None,
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -791,14 +793,6 @@ impl TryFrom<&AuthorizedotnetRouterData<&PaymentsAuthorizeRouterData>>
     fn try_from(
         item: &AuthorizedotnetRouterData<&PaymentsAuthorizeRouterData>,
     ) -> Result<Self, Self::Error> {
-        if item.router_data.is_three_ds() {
-            return Err(errors::ConnectorError::NotSupported {
-                message: "3DS flow".to_string(),
-                connector: "Authorizedotnet",
-            }
-            .into());
-        };
-
         let merchant_authentication =
             AuthorizedotnetAuthType::try_from(&item.router_data.connector_auth_type)?;
 
@@ -848,6 +842,7 @@ impl TryFrom<&AuthorizedotnetRouterData<&PaymentsAuthorizeRouterData>>
                     | PaymentMethodData::OpenBanking(_)
                     | PaymentMethodData::CardToken(_)
                     | PaymentMethodData::NetworkToken(_)
+                    | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
                     | PaymentMethodData::VaultDataCard(_)
                     | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                         Err(errors::ConnectorError::NotImplemented(
@@ -911,6 +906,7 @@ impl
                 | PaymentMethodData::OpenBanking(_)
                 | PaymentMethodData::CardToken(_)
                 | PaymentMethodData::NetworkToken(_)
+                | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
                 | PaymentMethodData::VaultDataCard(_)
                 | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                     Err(errors::ConnectorError::NotImplemented(
@@ -967,12 +963,6 @@ impl
                 original_network_trans_id: Secret::new(network_trans_id),
                 reason: Reason::Resubmission,
             }),
-            authorization_indicator_type: match item.router_data.request.capture_method {
-                Some(capture_method) => Some(AuthorizationIndicator {
-                    authorization_indicator: capture_method.try_into()?,
-                }),
-                None => None,
-            },
         })
     }
 }
@@ -1056,12 +1046,6 @@ impl
                 is_subsequent_auth: true,
             }),
             subsequent_auth_information: None,
-            authorization_indicator_type: match item.router_data.request.capture_method {
-                Some(capture_method) => Some(AuthorizationIndicator {
-                    authorization_indicator: capture_method.try_into()?,
-                }),
-                None => None,
-            },
         })
     }
 }
@@ -1079,6 +1063,13 @@ impl
             &Card,
         ),
     ) -> Result<Self, Self::Error> {
+        if item.router_data.is_three_ds() {
+            return Err(errors::ConnectorError::NotSupported {
+                message: "3DS flow".to_string(),
+                connector: "Authorizedotnet",
+            }
+            .into());
+        };
         let profile = if item
             .router_data
             .request
@@ -1160,12 +1151,6 @@ impl
             },
             processing_options: None,
             subsequent_auth_information: None,
-            authorization_indicator_type: match item.router_data.request.capture_method {
-                Some(capture_method) => Some(AuthorizationIndicator {
-                    authorization_indicator: capture_method.try_into()?,
-                }),
-                None => None,
-            },
         })
     }
 }
@@ -1263,12 +1248,6 @@ impl
             },
             processing_options: None,
             subsequent_auth_information: None,
-            authorization_indicator_type: match item.router_data.request.capture_method {
-                Some(capture_method) => Some(AuthorizationIndicator {
-                    authorization_indicator: capture_method.try_into()?,
-                }),
-                None => None,
-            },
         })
     }
 }
@@ -1566,6 +1545,7 @@ impl<F, T>
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: Some(transaction_response.transaction_id.clone()),
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code: None,
                         network_error_message: None,
@@ -1670,6 +1650,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, AuthorizedotnetVoidResponse, T, Payment
                         status_code: item.http_code,
                         attempt_status: None,
                         connector_transaction_id: Some(transaction_response.transaction_id.clone()),
+                        connector_response_reference_id: None,
                         network_advice_code: None,
                         network_decline_code: None,
                         network_error_message: None,
@@ -1849,6 +1830,7 @@ impl<F> TryFrom<RefundsResponseRouterData<F, AuthorizedotnetRefundResponse>>
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: Some(transaction_response.transaction_id.clone()),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -2153,6 +2135,7 @@ fn get_err_response(
         status_code,
         attempt_status: None,
         connector_transaction_id: None,
+        connector_response_reference_id: None,
         network_advice_code: None,
         network_decline_code: None,
         network_error_message: None,

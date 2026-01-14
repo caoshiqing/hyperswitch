@@ -182,7 +182,6 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsExtendAu
             pm_token: None,
             connector_customer_id: None,
             recurring_mandate_payment_data: None,
-            ephemeral_key: None,
             multiple_capture_data: None,
             redirect_response: None,
             surcharge_details: None,
@@ -223,13 +222,23 @@ impl<F: Clone + Send + Sync> Domain<F, api::PaymentsExtendAuthorizationRequest, 
     for PaymentExtendAuthorization
 {
     #[instrument(skip_all)]
+    async fn populate_raw_customer_details<'a>(
+        &'a self,
+        _state: &SessionState,
+        _payment_data: &mut PaymentData<F>,
+        _request: Option<&payments::CustomerDetails>,
+        _processor: &domain::Processor,
+    ) -> errors::CustomResult<(), errors::StorageError> {
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
     async fn get_or_create_customer_details<'a>(
         &'a self,
         _state: &SessionState,
         _payment_data: &mut PaymentData<F>,
         _request: Option<payments::CustomerDetails>,
-        _merchant_key_store: &domain::MerchantKeyStore,
-        _storage_scheme: enums::MerchantStorageScheme,
+        _provider: &domain::Provider,
     ) -> errors::CustomResult<
         (
             PaymentExtendAuthorizationOperation<'a, F>,
@@ -288,11 +297,9 @@ impl<F: Clone + Sync> UpdateTracker<F, PaymentData<F>, api::PaymentsExtendAuthor
         &'b self,
         _state: &'b SessionState,
         _req_state: ReqState,
+        _processor: &domain::Processor,
         payment_data: PaymentData<F>,
         _customer: Option<domain::Customer>,
-        _storage_scheme: enums::MerchantStorageScheme,
-        _updated_customer: Option<storage::CustomerUpdate>,
-        _key_store: &domain::MerchantKeyStore,
         _frm_suggestion: Option<FrmSuggestion>,
         _header_payload: hyperswitch_domain_models::payments::HeaderPayload,
     ) -> RouterResult<(PaymentExtendAuthorizationOperation<'b, F>, PaymentData<F>)>

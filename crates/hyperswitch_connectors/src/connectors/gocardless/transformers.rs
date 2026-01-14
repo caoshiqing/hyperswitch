@@ -260,6 +260,7 @@ impl TryFrom<&types::TokenizationRouterData> for CustomerBankAccount {
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -435,6 +436,7 @@ impl TryFrom<&types::SetupMandateRouterData> for GocardlessMandateRequest {
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(

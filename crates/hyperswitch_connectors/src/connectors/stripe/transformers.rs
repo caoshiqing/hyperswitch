@@ -919,6 +919,7 @@ impl TryFrom<enums::PaymentMethodType> for StripePaymentMethodType {
             | enums::PaymentMethodType::PermataBankTransfer
             | enums::PaymentMethodType::PaySafeCard
             | enums::PaymentMethodType::Paze
+            | enums::PaymentMethodType::Qris
             | enums::PaymentMethodType::Givex
             | enums::PaymentMethodType::Benefit
             | enums::PaymentMethodType::Knet
@@ -942,7 +943,9 @@ impl TryFrom<enums::PaymentMethodType> for StripePaymentMethodType {
             | enums::PaymentMethodType::Flexiti
             | enums::PaymentMethodType::Mifinity
             | enums::PaymentMethodType::Breadpay
-            | enums::PaymentMethodType::UpiQr => Err(ConnectorError::NotImplemented(
+            | enums::PaymentMethodType::UpiQr
+            | enums::PaymentMethodType::OpenBanking
+            | enums::PaymentMethodType::NetworkToken => Err(ConnectorError::NotImplemented(
                 get_unimplemented_payment_method_error_message("stripe"),
             )
             .into()),
@@ -1135,6 +1138,17 @@ impl TryFrom<&enums::BankNames> for StripeBankNames {
     }
 }
 
+fn validate_and_get_setup_future_usage(
+    setup_future_usage: Option<common_enums::FutureUsage>,
+    payment_method_type: Option<common_enums::PaymentMethodType>,
+) -> Result<Option<common_enums::FutureUsage>, error_stack::Report<ConnectorError>> {
+    match payment_method_type {
+        Some(common_enums::PaymentMethodType::Affirm)
+        | Some(common_enums::PaymentMethodType::Klarna) => Ok(None),
+        Some(_) | None => Ok(setup_future_usage),
+    }
+}
+
 fn validate_shipping_address_against_payment_method(
     shipping_address: &Option<StripeShippingAddress>,
     payment_method: Option<&StripePaymentMethodType>,
@@ -1211,7 +1225,8 @@ impl TryFrom<&BankRedirectData> for StripePaymentMethodType {
             | BankRedirectData::OnlineBankingThailand { .. }
             | BankRedirectData::OpenBankingUk { .. }
             | BankRedirectData::Trustly { .. }
-            | BankRedirectData::LocalBankRedirect {} => Err(ConnectorError::NotImplemented(
+            | BankRedirectData::LocalBankRedirect {}
+            | BankRedirectData::OpenBanking { .. } => Err(ConnectorError::NotImplemented(
                 get_unimplemented_payment_method_error_message("stripe"),
             )),
         }
@@ -1572,7 +1587,8 @@ fn create_stripe_payment_method(
         | PaymentMethodData::OpenBanking(_)
         | PaymentMethodData::CardToken(_)
         | PaymentMethodData::NetworkToken(_)
-        | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => Err(
+        | PaymentMethodData::CardDetailsForNetworkTransactionId(_)
+        | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => Err(
             ConnectorError::NotImplemented(get_unimplemented_payment_method_error_message(
                 "stripe",
             ))
@@ -1732,6 +1748,15 @@ impl TryFrom<(&WalletData, Option<PaymentMethodToken>)> for StripePaymentMethodD
                                 tokenization_method: "apple_pay".to_string(),
                             }),
                         )))
+                    } else if let Some(PaymentMethodToken::Token(applepay_token)) =
+                        payment_method_token
+                    {
+                        Some(Self::Wallet(StripeWallet::ApplepayPayment(
+                            ApplepayPayment {
+                                token: applepay_token,
+                                payment_method_types: StripePaymentMethodType::Card,
+                            },
+                        )))
                     } else {
                         None
                     };
@@ -1889,7 +1914,8 @@ impl TryFrom<&BankRedirectData> for StripePaymentMethodData {
             | BankRedirectData::OpenBankingUk { .. }
             | BankRedirectData::Sofort { .. }
             | BankRedirectData::Trustly { .. }
-            | BankRedirectData::LocalBankRedirect {} => Err(ConnectorError::NotImplemented(
+            | BankRedirectData::LocalBankRedirect {}
+            | BankRedirectData::OpenBanking { .. } => Err(ConnectorError::NotImplemented(
                 get_unimplemented_payment_method_error_message("stripe"),
             )
             .into()),
@@ -1952,13 +1978,17 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
             (None, None)
         };
 
-        let payment_method_token = match &item.request.split_payments {
-            Some(SplitPaymentsRequest::StripeSplitPayment(_)) => {
+        let payment_method_token = match (
+            item.request.split_payments.as_ref(),
+            item.request.payment_method_data.clone(),
+        ) {
+            (Some(SplitPaymentsRequest::StripeSplitPayment(_)), PaymentMethodData::Card(_)) => {
                 match item.payment_method_token.clone() {
                     Some(PaymentMethodToken::Token(secret)) => Some(secret),
                     _ => None,
                 }
             }
+
             _ => None,
         };
 
@@ -2003,9 +2033,19 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
             payment_method,
             billing_address,
             payment_method_types,
-            mut setup_future_usage,
+            setup_future_usage,
         ) = if payment_method_token.is_some() {
-            (None, None, StripeBillingAddress::default(), None, None)
+            let setup_future_usage = validate_and_get_setup_future_usage(
+                item.request.setup_future_usage,
+                item.request.payment_method_type,
+            )?;
+            (
+                None,
+                None,
+                StripeBillingAddress::default(),
+                None,
+                setup_future_usage,
+            )
         } else {
             match item
                 .request
@@ -2072,6 +2112,7 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
                         | PaymentMethodData::OpenBanking(_)
                         | PaymentMethodData::CardToken(_)
                         | PaymentMethodData::NetworkToken(_)
+                        | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
                         | PaymentMethodData::VaultDataCard(_)
                         | PaymentMethodData::Card(_) => Err(ConnectorError::NotSupported {
                             message: "Network tokenization for payment method".to_string(),
@@ -2116,12 +2157,17 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
                         payment_method_type.as_ref(),
                     )?;
 
+                    let setup_future_usage = validate_and_get_setup_future_usage(
+                        item.request.setup_future_usage,
+                        item.request.payment_method_type,
+                    )?;
+
                     (
                         Some(payment_method_data),
                         None,
                         billing_address,
                         payment_method_type,
-                        item.request.setup_future_usage,
+                        setup_future_usage,
                     )
                 }
             }
@@ -2293,11 +2339,6 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
             None
         };
 
-        setup_future_usage = match (setup_future_usage, is_moto) {
-            (Some(enums::FutureUsage::OnSession), Some(true)) => None,
-            _ => setup_future_usage,
-        };
-
         Ok(Self {
             amount,                                      //hopefully we don't loose some cents here
             currency: item.request.currency.to_string(), //we need to copy the value and not transfer ownership
@@ -2330,7 +2371,7 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, MinorUnit)> for PaymentIntentRequest
             off_session: item.request.off_session,
             setup_future_usage: match (
                 item.request.split_payments.as_ref(),
-                item.request.setup_future_usage,
+                setup_future_usage,
                 item.request.customer_acceptance.as_ref(),
                 is_moto,
             ) {
@@ -3980,6 +4021,7 @@ impl TryFrom<RefundsResponseRouterData<Execute, RefundResponse>> for RefundsRout
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: Some(item.response.id),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -4017,6 +4059,7 @@ impl TryFrom<RefundsResponseRouterData<RSync, RefundResponse>> for RefundsRouter
                 status_code: item.http_code,
                 attempt_status: None,
                 connector_transaction_id: Some(item.response.id),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -4309,6 +4352,7 @@ impl<F, T> TryFrom<ResponseRouterData<F, ChargesResponse, T, PaymentsResponseDat
                 status_code: item.http_code,
                 attempt_status: Some(status),
                 connector_transaction_id: Some(item.response.id),
+                connector_response_reference_id: None,
                 network_advice_code: None,
                 network_decline_code: None,
                 network_error_message: None,
@@ -4608,7 +4652,10 @@ impl
             PaymentMethodData::BankRedirect(ref bank_redirect_data) => {
                 Ok(Self::try_from(bank_redirect_data)?)
             }
-            PaymentMethodData::Wallet(ref wallet_data) => Ok(Self::try_from((wallet_data, None))?),
+            PaymentMethodData::Wallet(ref wallet_data) => Ok(Self::try_from((
+                wallet_data,
+                item.payment_method_token.clone(),
+            ))?),
             PaymentMethodData::BankDebit(bank_debit_data) => {
                 let (_pm_type, bank_data) = get_bank_debit_data(bank_debit_data);
 
@@ -4690,6 +4737,7 @@ impl
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(ConnectorError::NotImplemented(
@@ -4912,17 +4960,17 @@ fn get_transaction_metadata(
     order_id: String,
 ) -> HashMap<String, String> {
     let mut meta_data = HashMap::from([("metadata[order_id]".to_string(), order_id)]);
-    let mut request_hash_map = HashMap::new();
-
     if let Some(metadata) = merchant_metadata {
         let hashmap: HashMap<String, Value> =
             serde_json::from_str(&metadata.peek().to_string()).unwrap_or(HashMap::new());
 
         for (key, value) in hashmap {
-            request_hash_map.insert(format!("metadata[{key}]"), value.to_string());
+            let metadata_value = match value {
+                Value::String(string_value) => string_value,
+                value_data => value_data.to_string(),
+            };
+            meta_data.insert(format!("metadata[{key}]"), metadata_value);
         }
-
-        meta_data.extend(request_hash_map)
     };
     meta_data
 }
@@ -4963,6 +5011,7 @@ fn get_stripe_payments_response_data(
         status_code: http_code,
         attempt_status: None,
         connector_transaction_id: Some(response_id),
+        connector_response_reference_id: None,
         network_advice_code: response
             .as_ref()
             .and_then(|res| res.network_advice_code.clone()),
