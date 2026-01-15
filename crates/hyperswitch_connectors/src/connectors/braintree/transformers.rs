@@ -630,7 +630,7 @@ impl TryFrom<&BraintreeRouterData<&types::PaymentsAuthorizeRouterData>>
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
-            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -666,7 +666,7 @@ impl TryFrom<&BraintreeRouterData<&types::PaymentsCompleteAuthorizeRouterData>>
             | api_models::enums::PaymentMethod::Upi
             | api_models::enums::PaymentMethod::OpenBanking
             | api_models::enums::PaymentMethod::Voucher
-            | api_models::enums::PaymentMethod::NetworkToken => {
+            | api_models::enums::PaymentMethod::NetworkToken
             | api_models::enums::PaymentMethod::VaultDataCard
             | api_models::enums::PaymentMethod::GiftCard => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -1626,7 +1626,7 @@ impl TryFrom<&types::TokenizationRouterData> for BraintreeTokenRequest {
             | PaymentMethodData::GiftCard(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
-            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => {
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
@@ -2689,7 +2689,7 @@ fn get_braintree_redirect_form(
             | PaymentMethodData::GiftCard(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
-            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_) => Err(
+            | PaymentMethodData::NetworkTokenDetailsForNetworkTransactionId(_)
             | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => Err(
                 errors::ConnectorError::NotImplemented("given payment method".to_owned()),

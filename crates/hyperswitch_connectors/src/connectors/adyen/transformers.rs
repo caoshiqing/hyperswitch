@@ -160,6 +160,13 @@ pub struct AdditionalData {
     sca_exemption: Option<AdyenExemptionValues>,
 }
 
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+struct AdyenPaymentDataSource {
+    #[serde(rename = "type")]
+    data_type: String,
+    tokenized: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AdyenExemptionValues {
@@ -3134,7 +3141,7 @@ impl
                             message: "Network tokenization for payment method".to_string(),
                             connector: "Adyen",
                         })?
-                    })?,
+                    },
                 }
             }
             payments::MandateReferenceId::NetworkTokenWithNTI(network_mandate_id) => {

@@ -5877,7 +5877,7 @@ where
                 | PaymentMethodDataResponse::Wallet(_)
                 | PaymentMethodDataResponse::BankTransfer(_)
                 | PaymentMethodDataResponse::OpenBanking(_)
-                | PaymentMethodDataResponse::NetworkToken(_) => {
+                | PaymentMethodDataResponse::NetworkToken(_)
                 | PaymentMethodDataResponse::VaultDataCard(_)
                 | PaymentMethodDataResponse::Voucher(_) => {
                     payment_method_data_response.serialize(serializer)

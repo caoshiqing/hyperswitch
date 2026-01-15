@@ -2187,95 +2187,95 @@ where
         &platform,
     )
 }
-
-#[cfg(feature = "v1")]
-#[allow(clippy::too_many_arguments)]
-pub async fn payments_core_with_vault<F, Res, Req, Op, FData, D>(
-    state: SessionState,
-    req_state: ReqState,
-    platform: domain::Platform,
-    auth: services::authentication::AuthenticationData,
-    operation: Op,
-    req: Req,
-    auth_flow: services::AuthFlow,
-    call_connector_action: CallConnectorAction,
-    shadow_ucs_call_connector_action: Option<CallConnectorAction>,
-    eligible_connectors: Option<Vec<enums::Connector>>,
-    header_payload: HeaderPayload,
-) -> RouterResponse<Res>
-where
-    F: Send + Clone + Sync + Debug + 'static,
-    FData: Send + Sync + Clone + router_types::Capturable + 'static + serde::Serialize,
-    Op: Operation<F, Req, Data = D> + Send + Sync + Clone,
-    Req: Debug + Authenticate + Clone,
-    D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
-    Res: transformers::ToResponse<F, D, Op>,
-    // To create connector flow specific interface data
-    D: ConstructFlowSpecificData<F, FData, router_types::PaymentsResponseData>,
-    RouterData<F, FData, router_types::PaymentsResponseData>: Feature<F, FData>,
-    // To construct connector flow specific api
-    dyn api::Connector:
-        services::api::ConnectorIntegration<F, FData, router_types::PaymentsResponseData>,
-
-    // To perform router related operation for PaymentResponse
-    PaymentResponse: Operation<F, FData, Data = D>,
-{
-    let eligible_routable_connectors = eligible_connectors.map(|connectors| {
-        connectors
-            .into_iter()
-            .flat_map(|c| c.foreign_try_into())
-            .collect()
-    });
-    let (mut payment_data, _req, customer, connector_http_status_code, external_latency) =
-        payments_operation_core::<_, _, _, _, _>(
-            &state,
-            req_state,
-            &platform,
-            auth.profile_id,
-            operation.clone(),
-            req,
-            call_connector_action,
-            shadow_ucs_call_connector_action,
-            auth_flow,
-            eligible_routable_connectors,
-            header_payload.clone(),
-        )
-        .await?;
-    if let Some(profile_id) = payment_data.get_payment_intent().profile_id.as_ref() {
-        let profile = state
-            .store()
-            .find_business_profile_by_merchant_id_profile_id(
-                &auth.key_store,
-                auth.merchant_account.get_id(),
-                &profile_id,
-            )
-            .await
-            .to_not_found_response(errors::ApiErrorResponse::Unauthorized)?;
-
-        vault_session_v1::populate_vault_session_details(
-            &state,
-            &customer,
-            &platform,
-            &profile,
-            &mut payment_data,
-            &auth.key_store,
-            header_payload.clone(),
-        )
-        .await?;
-    }
-
-    Res::generate_response(
-        payment_data,
-        customer,
-        auth_flow,
-        &state.base_url,
-        operation,
-        &state.conf.connector_request_reference_id_config,
-        connector_http_status_code,
-        external_latency,
-        header_payload.x_hs_latency,
-    )
-}
+//
+// #[cfg(feature = "v1")]
+// #[allow(clippy::too_many_arguments)]
+// pub async fn payments_core_with_vault<F, Res, Req, Op, FData, D>(
+//     state: SessionState,
+//     req_state: ReqState,
+//     platform: domain::Platform,
+//     auth: services::authentication::AuthenticationData,
+//     operation: Op,
+//     req: Req,
+//     auth_flow: services::AuthFlow,
+//     call_connector_action: CallConnectorAction,
+//     shadow_ucs_call_connector_action: Option<CallConnectorAction>,
+//     eligible_connectors: Option<Vec<enums::Connector>>,
+//     header_payload: HeaderPayload,
+// ) -> RouterResponse<Res>
+// where
+//     F: Send + Clone + Sync + Debug + 'static,
+//     FData: Send + Sync + Clone + router_types::Capturable + 'static + serde::Serialize,
+//     Op: Operation<F, Req, Data = D> + Send + Sync + Clone,
+//     Req: Debug + Authenticate + Clone,
+//     D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
+//     Res: transformers::ToResponse<F, D, Op>,
+//     // To create connector flow specific interface data
+//     D: ConstructFlowSpecificData<F, FData, router_types::PaymentsResponseData>,
+//     RouterData<F, FData, router_types::PaymentsResponseData>: Feature<F, FData>,
+//     // To construct connector flow specific api
+//     dyn api::Connector:
+//         services::api::ConnectorIntegration<F, FData, router_types::PaymentsResponseData>,
+//
+//     // To perform router related operation for PaymentResponse
+//     PaymentResponse: Operation<F, FData, Data = D>,
+// {
+//     let eligible_routable_connectors = eligible_connectors.map(|connectors| {
+//         connectors
+//             .into_iter()
+//             .flat_map(|c| c.foreign_try_into())
+//             .collect()
+//     });
+//     let (mut payment_data, _req, customer, connector_http_status_code, external_latency) =
+//         payments_operation_core::<_, _, _, _, _>(
+//             &state,
+//             req_state,
+//             &platform,
+//             auth.profile。,
+//             operation.clone(),
+//             req,
+//             call_connector_action,
+//             shadow_ucs_call_connector_action,
+//             auth_flow,
+//             eligible_routable_connectors,
+//             header_payload.clone(),
+//         )
+//         .await?;
+//     if let Some(profile_id) = payment_data.get_payment_intent().profile_id.as_ref() {
+//         let profile = state
+//             .store()
+//             .find_business_profile_by_merchant_id_profile_id(
+//                 &platform.get_processor().get_key_store(),,
+//                 auth.merchant_account.get_id(),
+//                 &profile_id,
+//             )
+//             .await
+//             .to_not_found_response(errors::ApiErrorResponse::Unauthorized)?;
+//
+//         vault_session_v1::populate_vault_session_details(
+//             &state,
+//             &customer,
+//             &platform,
+//             &profile,
+//             &mut payment_data,
+//             &auth.key_store,
+//             header_payload.clone(),
+//         )
+//         .await?;
+//     }
+//
+//     Res::generate_response(
+//         payment_data,
+//         customer,
+//         auth_flow,
+//         &state.base_url,
+//         operation,
+//         &state.conf.connector_request_reference_id_config,
+//         connector_http_status_code,
+//         external_latency,
+//         header_payload.x_hs_latency,
+//     )
+// }
 
 #[cfg(feature = "v1")]
 #[allow(clippy::too_many_arguments)]

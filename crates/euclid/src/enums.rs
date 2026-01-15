@@ -356,6 +356,7 @@ pub enum RoutableConnectors {
     Netcetera,
     Cardinal,
     Threedsecureio,
+    Axia,
 }
 
 impl TryFrom<Connector> for RoutableConnectors {
@@ -497,6 +498,7 @@ impl TryFrom<Connector> for RoutableConnectors {
             Connector::Phonepe => Ok(Self::Phonepe),
             Connector::Payjustnow => Ok(Self::Payjustnow),
             Connector::Payjustnowinstore => Ok(Self::Payjustnowinstore),
+            Connector::Axia => Ok(Self::Axia),
             Connector::CtpMastercard
             | Connector::Gpayments
             | Connector::HyperswitchVault
@@ -657,6 +659,7 @@ impl From<RoutableConnectors> for Connector {
             RoutableConnectors::Netcetera => Self::Netcetera,
             RoutableConnectors::Cardinal => Self::Cardinal,
             RoutableConnectors::Threedsecureio => Self::Threedsecureio,
+            RoutableConnectors::Axia => Self::Axia,
         }
     }
 }
