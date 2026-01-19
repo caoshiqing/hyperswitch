@@ -2371,20 +2371,19 @@ pub async fn delete_card_from_hs_locker<'a>(
     let locker = &state.conf.locker;
     let jwekey = &state.conf.jwekey.get_inner();
 
-    let request = payment_methods::mk_delete_card_request_hs(
-        jwekey,
-        locker,
-        customer_id,
-        merchant_id,
-        card_reference,
-        state.tenant.tenant_id.clone(),
-        state.request_id.clone(),
-    )
-    .await
-    .change_context(errors::VaultError::DeleteCardFailed)
-    .attach_printable("Making delete card request failed")?;
-
     if !locker.mock_locker {
+        let request = payment_methods::mk_delete_card_request_hs(
+            jwekey,
+            locker,
+            customer_id,
+            merchant_id,
+            card_reference,
+            state.tenant.tenant_id.clone(),
+            state.request_id.clone(),
+        )
+            .await
+            .change_context(errors::VaultError::DeleteCardFailed)
+            .attach_printable("Making delete card request failed")?;
         call_locker_api::<payment_methods::DeleteCardResp>(
             state,
             request,
