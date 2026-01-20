@@ -3960,10 +3960,7 @@ pub enum AdditionalPaymentData {
         #[serde(flatten)]
         details: Option<MobilePaymentData>,
     },
-    VaultDataCard {
-        #[serde(flatten)]
-        details: Option<VaultDataCardAdditionalData>,
-    },
+    VaultDataCard(Box<AdditionalCardInfo>),
 }
 
 impl AdditionalPaymentData {
@@ -5709,7 +5706,7 @@ pub enum PaymentMethodDataResponse {
     #[smithy(value_type = "MobilePaymentResponse")]
     MobilePayment(Box<MobilePaymentResponse>),
     #[smithy(value_type = "VaultCardResponse")]
-    VaultDataCard(Box<VaultCardResponse>),
+    VaultDataCard(Box<CardResponse>),
 }
 
 #[derive(
@@ -8897,9 +8894,7 @@ impl From<AdditionalPaymentData> for PaymentMethodDataResponse {
             AdditionalPaymentData::MobilePayment { details } => {
                 Self::MobilePayment(Box::new(MobilePaymentResponse { details }))
             }
-            AdditionalPaymentData::VaultDataCard { details } => {
-                Self::VaultDataCard(Box::new(VaultCardResponse { details }))
-            }
+            AdditionalPaymentData::VaultDataCard(card) => Self::Card(Box::new(CardResponse::from(*card)))
         }
     }
 }

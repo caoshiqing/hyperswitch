@@ -22,11 +22,14 @@ use std::collections::HashMap;
 use serde_json::Value;
 use hyperswitch_domain_models::router_response_types::MandateReference;
 use hyperswitch_domain_models::types::SetupMandateRouterData;
-use crate::{types::{
-    RefundsResponseRouterData, ResponseRouterData
-}, utils, utils::{
-     CardData, RouterData as OtherRouterData,PaymentsAuthorizeRequestData
-}};
+use crate::{
+    types::{
+        RefundsResponseRouterData, ResponseRouterData
+    },
+    utils::{
+       self, CardData, RouterData as OtherRouterData, PaymentsAuthorizeRequestData
+    }
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Flags {
@@ -423,27 +426,7 @@ impl TryFrom<(&PaymentsAuthorizeRouterData,&ExternalVaultCard)> for AxiaPaymentM
     type Error = errors::ConnectorError;
 
     fn try_from((item,card): (&PaymentsAuthorizeRouterData,&ExternalVaultCard)) -> Result<Self, Self::Error> {
-        let year = card.card_exp_year
-            .peek()
-            .get(card.card_exp_year.peek().len().saturating_sub(2)..)
-            .ok_or(errors::ConnectorError::RequestEncodingFailed)?
-            .to_string();
-
-        // 获取月份（需要格式化为两位）
-        let exp_month = card.card_exp_month
-            .peek()
-            .parse::<u8>()
-            .map_err(|_| errors::ConnectorError::InvalidDataFormat {
-                field_name: "payment_method_data.card.card_exp_month",
-            })?;
-
-        let month = ::cards::CardExpirationMonth::try_from(exp_month)
-            .map_err(|_| errors::ConnectorError::InvalidDataFormat {
-                field_name: "payment_method_data.card.card_exp_month",
-            })?;
-
-        // 拼接为 MMYY 格式
-        let expdate = Secret::new(format!("{}{}", month.two_digits(), year));
+        let expdate = card.get_expiry_date_as_mmyy()?;
         let account_data = AxiaAccountData {
             account: Some(card.card_number.clone()),
             expdate: Some(expdate),
@@ -471,26 +454,7 @@ impl TryFrom<&SetupMandateRouterData> for AxiaZeroMandateRequest{
     fn try_from(item: &SetupMandateRouterData) -> Result<Self, Self::Error> {
         let account_data = match item.request.payment_method_data.clone() {
             PaymentMethodData::Card(ccard) => {
-                let year = ccard.card_exp_year
-                    .peek()
-                    .get(ccard.card_exp_year.peek().len().saturating_sub(2)..)
-                    .ok_or(errors::ConnectorError::RequestEncodingFailed)?
-                    .to_string();
-                // 获取月份（需要格式化为两位）
-                let exp_month = ccard.card_exp_month
-                    .peek()
-                    .parse::<u8>()
-                    .map_err(|_| errors::ConnectorError::InvalidDataFormat {
-                        field_name: "payment_method_data.card.card_exp_month",
-                    })?;
-
-                let month = ::cards::CardExpirationMonth::try_from(exp_month)
-                    .map_err(|_| errors::ConnectorError::InvalidDataFormat {
-                        field_name: "payment_method_data.card.card_exp_month",
-                    })?;
-
-                // 拼接为 MMYY 格式
-                let expdate = Secret::new(format!("{}{}", month.two_digits(), year));
+                let expdate = ccard.get_expiry_date_as_mmyy()?;
                 AxiaAccountData {
                     account: Some(ccard.card_number.clone()),
                     expdate: Some(expdate),

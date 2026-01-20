@@ -445,6 +445,16 @@ pub struct CardRequestStruct {
     attributes: Option<CardRequestAttributes>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct VaultDataCardRequestStruct {
+    billing_address: Option<Address>,
+    expiry: Option<Secret<String>>,
+    name: Option<Secret<String>>,
+    number: Option<Secret<String>>,
+    security_code: Option<Secret<String>>,
+    attributes: Option<CardRequestAttributes>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VaultStruct {
     vault_id: Secret<String>,
@@ -454,6 +464,7 @@ pub struct VaultStruct {
 #[serde(untagged)]
 pub enum CardRequest {
     CardRequestStruct(CardRequestStruct),
+    VaultDataCardRequestStruct(VaultDataCardRequestStruct),
     CardVaultStruct(VaultStruct),
 }
 #[derive(Debug, Serialize)]
@@ -1014,6 +1025,46 @@ impl TryFrom<&PaypalRouterData<&PaymentsAuthorizeRouterData>> for PaypalPayments
                     payment_source,
                 })
             }
+            PaymentMethodData::VaultDataCard(ref ccard) => {
+                let expiry = Some(ccard.get_expiry_date_as_yyyymm("-"));
+
+                let verification = match item.router_data.auth_type {
+                    enums::AuthenticationType::ThreeDs => Some(ThreeDsMethod {
+                        method: ThreeDsType::ScaAlways,
+                    }),
+                    enums::AuthenticationType::NoThreeDs => None,
+                };
+
+                let payment_source = Some(PaymentSourceItem::Card(CardRequest::VaultDataCardRequestStruct(
+                    VaultDataCardRequestStruct {
+                        billing_address: get_address_info(item.router_data.get_optional_billing()),
+                        expiry,
+                        name: item.router_data.get_optional_billing_full_name(),
+                        number: Some(ccard.card_number.clone()),
+                        security_code: Some(ccard.card_cvc.clone()),
+                        attributes: Some(CardRequestAttributes {
+                            vault: match item.router_data.request.setup_future_usage {
+                                Some(setup_future_usage) => match setup_future_usage {
+                                    enums::FutureUsage::OffSession => Some(PaypalVault {
+                                        store_in_vault: StoreInVault::OnSuccess,
+                                        usage_type: UsageType::Merchant,
+                                    }),
+
+                                    enums::FutureUsage::OnSession => None,
+                                },
+                                None => None,
+                            },
+                            verification,
+                        }),
+                    },
+                )));
+
+                Ok(Self {
+                    intent,
+                    purchase_units,
+                    payment_source,
+                })
+            }
             PaymentMethodData::Wallet(ref wallet_data) => match wallet_data {
                 WalletData::PaypalRedirect(_) => {
                     let payment_source = Some(PaymentSourceItem::Paypal(
@@ -1323,7 +1374,6 @@ impl TryFrom<&PaypalRouterData<&PaymentsAuthorizeRouterData>> for PaypalPayments
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
-            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(errors::ConnectorError::NotImplemented(
                     utils::get_unimplemented_payment_method_error_message("Paypal"),
