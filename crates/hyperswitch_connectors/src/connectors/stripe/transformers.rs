@@ -4602,6 +4602,19 @@ impl
                     None,
                 ))?)
             }
+            PaymentMethodData::VaultDataCard(ref ccard) => {
+                let payment_method_auth_type = match auth_type {
+                    enums::AuthenticationType::ThreeDs => Auth3ds::Any,
+                    enums::AuthenticationType::NoThreeDs => Auth3ds::Automatic,
+                };
+                Ok(Self::try_from((
+                    ccard.deref(),
+                    payment_method_auth_type,
+                    item.request.request_incremental_authorization,
+                    None,
+                    None,
+                ))?)
+            }
             PaymentMethodData::PayLater(_) => Ok(Self::PayLater(StripePayLaterData {
                 payment_method_data_type: pm_type,
             })),
@@ -4690,7 +4703,6 @@ impl
             | PaymentMethodData::OpenBanking(_)
             | PaymentMethodData::CardToken(_)
             | PaymentMethodData::NetworkToken(_)
-            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_) => {
                 Err(ConnectorError::NotImplemented(
                     get_unimplemented_payment_method_error_message("stripe"),

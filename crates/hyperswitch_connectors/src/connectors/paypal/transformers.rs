@@ -1,3 +1,4 @@
+use std::{str::FromStr};
 #[cfg(feature = "payouts")]
 use api_models::payouts::{PayoutMethodData, Wallet as WalletPayout};
 use api_models::{enums, webhooks::IncomingWebhookEvent};
@@ -6,7 +7,8 @@ use common_enums::enums as storage_enums;
 #[cfg(feature = "payouts")]
 use common_utils::pii::Email;
 use common_utils::{consts, errors::CustomResult, request::Method, types::StringMajorUnit};
-use error_stack::ResultExt;
+use error_stack::{report, ResultExt};
+use masking::{PeekInterface};
 use hyperswitch_domain_models::{
     payment_method_data::{
         BankDebitData, BankRedirectData, BankTransferData, CardRedirectData, GiftCardData,
@@ -697,7 +699,21 @@ impl TryFrom<&SetupMandateRouterData> for PaypalZeroMandateRequest {
                 name: item.get_optional_billing_full_name(),
                 number: Some(ccard.card_number),
             }),
-
+            PaymentMethodData::VaultDataCard(ccard) => {
+                let card_number = ::cards::CardNumber::from_str(ccard.card_number.peek())
+                    .map_err(|_| {
+                        report!(errors::ConnectorError::InvalidDataFormat {
+                            field_name: "card_number",
+                        })
+                        .attach_printable("Failed to parse card number")
+                    })?;
+                ZeroMandateSourceItem::Card(CardMandateRequest{
+                billing_address: get_address_info(item.get_optional_billing()),
+                expiry: Some(ccard.get_expiry_date_as_yyyymm("-")),
+                name: item.get_optional_billing_full_name(),
+                number: Some(card_number),
+            })
+            },
             PaymentMethodData::Wallet(_)
             | PaymentMethodData::CardRedirect(_)
             | PaymentMethodData::PayLater(_)
@@ -715,7 +731,6 @@ impl TryFrom<&SetupMandateRouterData> for PaypalZeroMandateRequest {
             | PaymentMethodData::CardDetailsForNetworkTransactionId(_)
             | PaymentMethodData::NetworkToken(_)
             | PaymentMethodData::OpenBanking(_)
-            | PaymentMethodData::VaultDataCard(_)
             | PaymentMethodData::MobilePayment(_) => Err(errors::ConnectorError::NotImplemented(
                 utils::get_unimplemented_payment_method_error_message("Paypal"),
             ))?,

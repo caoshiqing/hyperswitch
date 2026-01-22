@@ -1,7 +1,9 @@
+use cards;
 use common_enums::enums;
 use common_utils::pii;
 use common_utils::types::StringMajorUnit;
 use api_models::{self, enums as api_enums};
+use error_stack::ResultExt;
 use hyperswitch_domain_models::{
     payment_method_data::{
         Card, ExternalVaultCard, PaymentMethodData,
@@ -19,6 +21,7 @@ use masking::{PeekInterface, Secret};
 use serde::{Deserialize, Serialize};
 use std::{ fmt::Debug, ops::Deref};
 use std::collections::HashMap;
+use std::str::FromStr;
 use serde_json::Value;
 use hyperswitch_domain_models::router_response_types::MandateReference;
 use hyperswitch_domain_models::types::SetupMandateRouterData;
@@ -462,6 +465,18 @@ impl TryFrom<&SetupMandateRouterData> for AxiaZeroMandateRequest{
                     token: None,
                 }
             },
+            PaymentMethodData::VaultDataCard(ccard)=>{
+                let expdate = ccard.get_expiry_date_as_mmyy()?;
+                let card_number = cards::CardNumber::from_str(ccard.card_number.peek())
+                    .change_context(errors::ConnectorError::InvalidDataFormat{field_name:"card_number"})
+                    .attach_printable("Failed to parse card number from vault data")?;
+                AxiaAccountData {
+                    account: Some(card_number),
+                    expdate: Some(expdate),
+                    cardholdername: None,
+                    token: None,
+                }
+            }
             _ => Err(errors::ConnectorError::NotImplemented(
                 utils::get_unimplemented_payment_method_error_message("axia")
             ))?
