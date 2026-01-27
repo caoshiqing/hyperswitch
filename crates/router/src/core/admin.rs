@@ -2812,33 +2812,34 @@ pub async fn update_connector(
 
     // redact cgraph cache on connector updation
     redact_cgraph_cache(&state, &merchant_id, &profile_id).await?;
+    if !matches!(req.connector_type, api_enums::ConnectorType::VaultProcessor) {
+        // redact routing cache on connector updation
+        #[cfg(feature = "v1")]
+        let merchant_config = MerchantDefaultConfigUpdate {
+            routable_connector: &Some(
+                common_enums::RoutableConnectors::from_str(&mca.connector_name).map_err(|_| {
+                    errors::ApiErrorResponse::InvalidDataValue {
+                        field_name: "connector_name",
+                    }
+                })?,
+            ),
+            merchant_connector_id: &mca.get_id(),
+            store: db,
+            merchant_id: &merchant_id,
+            profile_id: &mca.profile_id,
+            transaction_type: &mca.connector_type.into(),
+        };
 
-    // redact routing cache on connector updation
-    #[cfg(feature = "v1")]
-    let merchant_config = MerchantDefaultConfigUpdate {
-        routable_connector: &Some(
-            common_enums::RoutableConnectors::from_str(&mca.connector_name).map_err(|_| {
-                errors::ApiErrorResponse::InvalidDataValue {
-                    field_name: "connector_name",
-                }
-            })?,
-        ),
-        merchant_connector_id: &mca.get_id(),
-        store: db,
-        merchant_id: &merchant_id,
-        profile_id: &mca.profile_id,
-        transaction_type: &mca.connector_type.into(),
-    };
-
-    #[cfg(feature = "v1")]
-    if req.disabled.unwrap_or(false) {
-        merchant_config
-            .retrieve_and_delete_from_default_fallback_routing_algorithm_if_routable_connector_exists()
-            .await?;
-    } else {
-        merchant_config
-            .retrieve_and_update_default_fallback_routing_algorithm_if_routable_connector_exists()
-            .await?;
+        #[cfg(feature = "v1")]
+        if req.disabled.unwrap_or(false) {
+            merchant_config
+                .retrieve_and_delete_from_default_fallback_routing_algorithm_if_routable_connector_exists()
+                .await?;
+        } else {
+            merchant_config
+                .retrieve_and_update_default_fallback_routing_algorithm_if_routable_connector_exists()
+                .await?;
+        }
     }
 
     let response = updated_mca.foreign_try_into()?;

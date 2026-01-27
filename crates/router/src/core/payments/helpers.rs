@@ -36,7 +36,7 @@ use hyperswitch_domain_models::payments::payment_intent::CustomerData;
 use hyperswitch_domain_models::{
     mandates::MandateData,
     merchant_connector_account::ExternalVaultConnectorMetadata,
-    payment_method_data::{GetPaymentMethodType, PaymentMethodData, PazeWalletData},
+    payment_method_data::{GetPaymentMethodType, PazeWalletData},
     payments::{
         self as domain_payments, payment_attempt::PaymentAttempt,
         payment_intent::PaymentIntentFetchConstraints, PaymentIntent,
@@ -70,7 +70,6 @@ use uuid::Uuid;
 use x509_parser::parse_x509_certificate;
 
 use super::{
-    helpers,
     operations::{BoxedOperation, Operation, PaymentResponse},
     CustomerDetails, PaymentData,
 };
@@ -2130,9 +2129,7 @@ impl Default for RolloutConfig {
 
 // Re-export ProxyOverride from hyperswitch_interfaces
 pub use hyperswitch_interfaces::types::ProxyOverride;
-use hyperswitch_interfaces::unified_connector_service::UnifiedConnectorServiceError;
 
-use crate::core::payments::vault_session_v1::generate_vault_session_details;
 
 #[derive(Debug, Clone)]
 pub struct RolloutExecutionResult {
@@ -5519,11 +5516,150 @@ pub async fn get_additional_payment_data(
                 details: Some(mobile_payment.to_owned().into()),
             },
         )),
-        domain::PaymentMethodData::VaultDataCard(external_vault_card) => Ok(Some(
-            api_models::payments::AdditionalPaymentData::VaultDataCard {
-                details: Some((*(external_vault_card.to_owned())).into()),
-            },
-        )),
+        domain::PaymentMethodData::VaultDataCard(card_data) => {
+            //todo!
+            let card_number = ::cards::CardNumber::from_str(card_data.card_number.peek())
+                .map_err(|_| {
+                    report!(errors::ApiErrorResponse::InvalidDataValue { field_name: "card_number",
+                    })
+                        .attach_printable("Failed to parse card number")
+                })?;
+            let card_isin = Some(card_number.get_card_isin());
+            let enable_extended_bin =db
+                .find_config_by_key_unwrap_or(
+                    format!("{}_enable_extended_card_bin", profile_id.get_string_repr()).as_str(),
+                    Some("false".to_string()))
+                .await.map_err(|err| services::logger::error!(message="Failed to fetch the config", extended_card_bin_error=?err)).ok();
+
+            let card_extended_bin = match enable_extended_bin {
+                Some(config) if config.config == "true" => {
+                    Some(card_number.get_extended_card_bin())
+                }
+                _ => None,
+            };
+
+            // Added an additional check for card_data.co_badged_card_data.is_some()
+            // because is_cobadged_card() only returns true if the card number matches a specific regex.
+            // However, this regex does not cover all possible co-badged networks.
+            // The co_badged_card_data field is populated based on a co-badged BIN lookup
+            // and helps identify co-badged cards that may not match the regex alone.
+            // Determine the card network based on cobadge detection and co-badged BIN data
+            let is_cobadged_based_on_regex = card_number
+                .is_cobadged_card()
+                .change_context(errors::ApiErrorResponse::InternalServerError)
+                .attach_printable(
+                    "Card cobadge check failed due to an invalid card network regex",
+                )?;
+
+            let (card_network, signature_network, is_regulated) = card_data
+                .co_badged_card_data
+                .as_ref()
+                .map(|co_badged_data| {
+                    logger::debug!("Co-badged card data found");
+
+                    (
+                        card_data.card_network.clone(),
+                        co_badged_data
+                            .co_badged_card_networks_info
+                            .get_signature_network(),
+                        Some(co_badged_data.is_regulated),
+                    )
+                })
+                .or_else(|| {
+                    is_cobadged_based_on_regex.then(|| {
+                        logger::debug!("Card network is cobadged (regex-based detection)");
+                        (card_data.card_network.clone(), None, None)
+                    })
+                })
+                .unwrap_or_else(|| {
+                    logger::debug!("Card network is not cobadged");
+                    (None, None, None)
+                });
+
+            let last4 = Some(card_number.get_last4());
+            if card_data.card_issuer.is_some()
+                && card_network.is_some()
+                && card_data.card_type.is_some()
+                && card_data.card_issuing_country.is_some()
+                && card_data.bank_code.is_some()
+            {
+                Ok(Some(api_models::payments::AdditionalPaymentData::Card(
+                    Box::new(api_models::payments::AdditionalCardInfo {
+                        card_issuer: card_data.card_issuer.to_owned(),
+                        card_network,
+                        card_type: card_data.card_type.to_owned(),
+                        card_issuing_country: card_data.card_issuing_country.to_owned(),
+                        bank_code: card_data.bank_code.to_owned(),
+                        card_exp_month: Some(card_data.card_exp_month.clone()),
+                        card_exp_year: Some(card_data.card_exp_year.clone()),
+                        card_holder_name: card_data.card_holder_name.clone(),
+                        last4: last4.clone(),
+                        card_isin: card_isin.clone(),
+                        card_extended_bin: card_extended_bin.clone(),
+                        // These are filled after calling the processor / connector
+                        payment_checks: None,
+                        authentication_data: None,
+                        is_regulated,
+                        signature_network: signature_network.clone(),
+                    }),
+                )))
+            } else {
+                let card_info = card_isin
+                    .clone()
+                    .async_and_then(|card_isin| async move {
+                        db.get_card_info(&card_isin)
+                            .await
+                            .map_err(|error| services::logger::warn!(card_info_error=?error))
+                            .ok()
+                    })
+                    .await
+                    .flatten()
+                    .map(|card_info| {
+                        api_models::payments::AdditionalPaymentData::Card(Box::new(
+                            api_models::payments::AdditionalCardInfo {
+                                card_issuer: card_info.card_issuer,
+                                card_network: card_network.clone().or(card_info.card_network),
+                                bank_code: card_info.bank_code,
+                                card_type: card_info.card_type,
+                                card_issuing_country: card_info.card_issuing_country,
+                                last4: last4.clone(),
+                                card_isin: card_isin.clone(),
+                                card_extended_bin: card_extended_bin.clone(),
+                                card_exp_month: Some(card_data.card_exp_month.clone()),
+                                card_exp_year: Some(card_data.card_exp_year.clone()),
+                                card_holder_name: card_data.card_holder_name.clone(),
+                                // These are filled after calling the processor / connector
+                                payment_checks: None,
+                                authentication_data: None,
+                                is_regulated,
+                                signature_network: signature_network.clone(),
+                            },
+                        ))
+                    });
+                Ok(Some(card_info.unwrap_or_else(|| {
+                    api_models::payments::AdditionalPaymentData::Card(Box::new(
+                        api_models::payments::AdditionalCardInfo {
+                            card_issuer: None,
+                            card_network,
+                            bank_code: None,
+                            card_type: None,
+                            card_issuing_country: None,
+                            last4,
+                            card_isin,
+                            card_extended_bin,
+                            card_exp_month: Some(card_data.card_exp_month.clone()),
+                            card_exp_year: Some(card_data.card_exp_year.clone()),
+                            card_holder_name: card_data.card_holder_name.clone(),
+                            // These are filled after calling the processor / connector
+                            payment_checks: None,
+                            authentication_data: None,
+                            is_regulated,
+                            signature_network: signature_network.clone(),
+                        },
+                    ))
+                })))
+            }
+        },
         domain::PaymentMethodData::NetworkToken(_) => Ok(None),
     }
 }
@@ -8600,19 +8736,30 @@ where
         let connector_name =
             external_vault_merchant_connector_account.get_connector_name_as_string();
 
+        let connector_auth_type =   external_vault_merchant_connector_account
+            .get_connector_account_details()
+            .change_context(errors::ApiErrorResponse::InternalServerError)
+            .attach_printable("Failed to obtain ConnectorMetadata")?;
+
+
         let external_vault_connector = api_enums::VaultConnectors::from_str(&connector_name)
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Failed to parse Vault connector")?;
 
         let vault_metadata = match external_vault_connector {
             api_enums::VaultConnectors::Vgs => {
-                let vgs_metadata: ExternalVaultConnectorMetadata = external_vault_metadata
+                let mut vgs_metadata: ExternalVaultConnectorMetadata = external_vault_metadata
                     .expose()
                     .parse_value("ExternalVaultConnectorMetadata")
                     .change_context(errors::ApiErrorResponse::InternalServerError)
                     .attach_printable("Failed to parse Vgs connector metadata")?;
-
-                Some(vgs_metadata)
+                if let crate::types::ConnectorAuthType::SignatureKey { api_key, key1, api_secret } = connector_auth_type {
+                    let new_proxy_url = vgs_metadata.proxy_url.replace_host_params(("{vault_id}", api_secret.peek())).set_username_password(api_key.peek(), key1.peek());
+                    vgs_metadata.proxy_url = new_proxy_url;
+                    Some(vgs_metadata)
+                } else {
+                    None
+                }
             }
             api_enums::VaultConnectors::HyperswitchVault | api_enums::VaultConnectors::Tokenex => {
                 None

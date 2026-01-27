@@ -1,7 +1,9 @@
+use cards;
 use common_enums::enums;
 use common_utils::pii;
 use common_utils::types::StringMajorUnit;
 use api_models::{self, enums as api_enums};
+use error_stack::ResultExt;
 use hyperswitch_domain_models::{
     payment_method_data::{
         Card, ExternalVaultCard, PaymentMethodData,
@@ -14,21 +16,23 @@ use hyperswitch_domain_models::{
     },
     types::{ConnectorCustomerRouterData, PaymentsAuthorizeRouterData, RefundsRouterData},
 };
-use hyperswitch_interfaces::{consts,errors::ConnectorError};
+use hyperswitch_interfaces::{consts,errors};
 use masking::{PeekInterface, Secret};
 use serde::{Deserialize, Serialize};
 use std::{ fmt::Debug, ops::Deref};
 use std::collections::HashMap;
+use std::str::FromStr;
 use serde_json::Value;
+use hyperswitch_domain_models::router_response_types::MandateReference;
+use hyperswitch_domain_models::types::SetupMandateRouterData;
 use crate::{
     types::{
         RefundsResponseRouterData, ResponseRouterData
     },
     utils::{
-        is_payment_failure, get_unimplemented_payment_method_error_message,CardData,is_refund_failure,RouterData as OtherRouterData
-    },
+       self, CardData, RouterData as OtherRouterData, PaymentsAuthorizeRequestData
+    }
 };
-
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Flags {
@@ -312,7 +316,7 @@ pub struct TransactionPurchaseRequest {
     pub money: Money,
     #[serde(flatten)]
     pub additional_property:HashMap<String,String>,
-    #[serde(rename = "shipping")]
+    #[serde(rename = "shipping",skip_serializing_if = "Option::is_none")]
     pub shipping: Option<AxiaShippingAddress>,
 }
 
@@ -329,6 +333,7 @@ pub struct AxiaCardData {
     pub verification: Option<Verification>,
     #[serde(rename = "account_data")]
     pub account_data: Option<AxiaAccountData<cards::CardNumber>>,
+
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -342,11 +347,15 @@ pub struct AxiaVaultCardData {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct AxiaAccountData<T> {
     /// Account number
-    #[serde(rename = "account")]
-    pub account: T,
+    #[serde(rename = "account",skip_serializing_if = "Option::is_none")]
+    pub account: Option<T>,
     /// Expiration date of the card (MMYY format)
-    #[serde(rename = "expdate")]
-    pub expdate: Secret<String>,
+    #[serde(rename = "expdate",skip_serializing_if = "Option::is_none")]
+    pub expdate: Option<Secret<String>>,
+    #[serde(rename = "cardholdername",skip_serializing_if = "Option::is_none")]
+    pub cardholdername: Option<Secret<String>>,
+    #[serde(rename = "token",skip_serializing_if = "Option::is_none")]
+    pub token: Option<Secret<String>>,
 }
 
 
@@ -366,17 +375,41 @@ pub struct AxiaShippingAddress {
     pub ship_zip:Option<Secret<String>>,
 }
 
+#[derive(Debug, Eq, PartialEq, Serialize)]
+pub struct AxiaZeroMandateRequest {
+    pub account_data: AxiaAccountData<cards::CardNumber>
+}
+
+
+
+#[derive(Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+pub struct AxiaSetupMandateResponse {
+    /// General result code  Values:  * `AUTH` - Transaction authorized/approved * `SUCCESS` - Operation was successful. Used for internal actions such as report generation * `CALL` - Call processor for authorization * `DENY` - Transaction denied, permanent denial, not likely to succeed on further attempts * `DUPL` - Duplicate transaction * `PKUP` - Confiscate card * `RETRY` - Temporary error, retrying the transaction may yield a different result. Typically these are clerk-initiated retries, not automated * `SETUP` - Setup error * `TIMEOUT` - Transaction not processed in allocated amount of time
+    #[serde(rename = "code")]
+    pub code: Code,
+    /// Detailed result code specific to internal checks  Values:  * `INT_SUCCESS` - All local System tests passed * `UNKNOWN` - Unknown. Could be pass or fail * `INT_GENERICFAIL` - Generic undefined failure * `ACCT_AUTHFAILED` - Either the username or password sent was invalid * `ACCT_DISABLED` - Account is disabled * `ACCT_SSLCERT` - SSL Certificate check failed * `ACCT_PASSEXPIRED` - Password reached expiration * `ACCT_TOOMANYATTEMPTS` - Too many bad login attempts * `ACCT_INVALIDTRANS` - Invalid transaction type for user * `ACCT_TRANSNOTALLOWED` - User does not have permission for transaction type * `ACCT_TRANSNOTALLOWED_PORT` - Admin or user level transactions are not allowed to be run on specified port * `ACCT_MFA_REQUIRED` - Multi Factor Authentication code required but not provided * `ACCT_MFA_INVALID` - Multi Factor Authentication code is invalid * `AUTH_MFA_GENERATE` - Mannot continue without generating a new Multi Factor Authentication code * `SETUP_SCHED` - Transaction could not be scheduled * `SETUP_CARDTYPE` - Card type not in setup * `SETUP_TRANTYPE` - Transaction type not supported for merchant * `SETUP_DATA` - Generic setup issue * `DATA_BADTRANS` - Bad transaction structure/data/unrecognized * `DATA_ACCOUNT` - Bad account number * `DATA_EXPDATE` - Bad expiration date * `DATA_AMOUNT` - Bad amount * `DATA_TRACKDATA` - Bad track data * `DATA_MICR` - Invalid MICR data, or no MICR sent when required * `DATA_ABAROUTE` - Invalid ABAROUTE specified * `DATA_NOOPENBATCHES` - No open Batches/Batch not found * `DATA_BATCHLOCKED` - Batch has been locked * `DATA_RECORDNOTFOUND` - Record not found * `DATA_INVALIDMOD` - Invalid modification to existing transaction * `DATA_NOCHANGES` - An edit was requested but there were no changes * `DATA_V8EMULATION` - Error evaluating V8 Emulation * `CONN_TOREVERSAL` - TOReversal must be issued. Status of transaction received unknown * `CONN_MAXSENDS` - Maximum send attempts reached * `CONN_MAXATTEMPTS` - Maximum attempts to connect to processor reached * `SYS_SHUTDOWN` - Shutdown being attempted * `SYS_MAINTENANCE` - Transaction type not allowed in maintenance mode * `LIC_USERS` - Max licensed user accounts reached * `LIC_CARDTYPE` - License does not allow that card type * `LIC_TRANEXCEED` - License Transaction Limit has been exceeded * `DB_FAIL` - Failure to write to the System database * `FRAUDAUTODENY` - Auto-denied transaction due to fraud rule * `NSFAUTODENY` - Transaction automatically denied due to insufficient funds when the merchant did not allow partial approvals * `CARDDENYLIST` - Decline due to presence on the card deny list * `ACHVERIFYDENY` - Transaction rejected by ACH verification service * `DATA_3DSMISSING` - Missing required 3DS data
+    #[serde(rename = "msoft_code", skip_serializing_if = "Option::is_none")]
+    pub msoft_code: Option<MsoftCode>,
+    /// Textual, human-interpretable response  Meant for clerk display only and should not be machine interpreted.  Verbiage can come from TranSafe or from a processor. Messages are subject to change at any time and cannot be documented.
+    #[serde(rename = "verbiage", skip_serializing_if = "Option::is_none")]
+    pub verbiage: Option<String>,
+    #[serde(rename = "token")]
+    pub token:String
+}
+
 impl TryFrom<(&PaymentsAuthorizeRouterData,&Card)> for AxiaPaymentMethodData {
-    type Error = ConnectorError;
+    type Error = errors::ConnectorError;
 
     fn try_from((item,card): (&PaymentsAuthorizeRouterData,&Card)) -> Result<Self, Self::Error> {
         let expdate = card.get_expiry_date_as_mmyy()?;
         let account_data = AxiaAccountData {
-            account: card.card_number.clone(),
-            expdate: expdate,
+            account: Some(card.card_number.clone()),
+            expdate: Some(expdate),
+            cardholdername: None,
+            token: None,
         };
         let shipping_zip = item.get_optional_shipping_zip().ok_or_else(|| {
-            ConnectorError::MissingRequiredField {
+            errors::ConnectorError::MissingRequiredField {
                 field_name:"shipping.address.zip"
             }
         })?;
@@ -393,36 +426,18 @@ impl TryFrom<(&PaymentsAuthorizeRouterData,&Card)> for AxiaPaymentMethodData {
 
 
 impl TryFrom<(&PaymentsAuthorizeRouterData,&ExternalVaultCard)> for AxiaPaymentMethodData {
-    type Error = ConnectorError;
+    type Error = errors::ConnectorError;
 
     fn try_from((item,card): (&PaymentsAuthorizeRouterData,&ExternalVaultCard)) -> Result<Self, Self::Error> {
-        let year = card.card_exp_year
-            .peek()
-            .get(card.card_exp_year.peek().len().saturating_sub(2)..)
-            .ok_or(ConnectorError::RequestEncodingFailed)?
-            .to_string();
-
-        // 获取月份（需要格式化为两位）
-        let exp_month = card.card_exp_month
-            .peek()
-            .parse::<u8>()
-            .map_err(|_| ConnectorError::InvalidDataFormat {
-                field_name: "payment_method_data.card.card_exp_month",
-            })?;
-
-        let month = ::cards::CardExpirationMonth::try_from(exp_month)
-            .map_err(|_| ConnectorError::InvalidDataFormat {
-                field_name: "payment_method_data.card.card_exp_month",
-            })?;
-
-        // 拼接为 MMYY 格式
-        let expdate = Secret::new(format!("{}{}", month.two_digits(), year));
+        let expdate = card.get_expiry_date_as_mmyy()?;
         let account_data = AxiaAccountData {
-            account: card.card_number.clone(),
-            expdate: expdate,
+            account: Some(card.card_number.clone()),
+            expdate: Some(expdate),
+            cardholdername: None,
+            token: None,
         };
         let shipping_zip = item.get_optional_shipping_zip().ok_or_else(|| {
-            ConnectorError::MissingRequiredField {
+            errors::ConnectorError::MissingRequiredField {
                 field_name:"shipping.address.zip"
             }
         })?;
@@ -434,6 +449,75 @@ impl TryFrom<(&PaymentsAuthorizeRouterData,&ExternalVaultCard)> for AxiaPaymentM
             verification: Some(verification),
             account_data: Some(account_data),
         }))
+    }
+}
+
+impl TryFrom<&SetupMandateRouterData> for AxiaZeroMandateRequest{
+    type Error = error_stack::Report<errors::ConnectorError>;
+    fn try_from(item: &SetupMandateRouterData) -> Result<Self, Self::Error> {
+        let account_data = match item.request.payment_method_data.clone() {
+            PaymentMethodData::Card(ccard) => {
+                let expdate = ccard.get_expiry_date_as_mmyy()?;
+                AxiaAccountData {
+                    account: Some(ccard.card_number.clone()),
+                    expdate: Some(expdate),
+                    cardholdername: None,
+                    token: None,
+                }
+            },
+            PaymentMethodData::VaultDataCard(ccard)=>{
+                let expdate = ccard.get_expiry_date_as_mmyy()?;
+                let card_number = cards::CardNumber::from_str(ccard.card_number.peek())
+                    .change_context(errors::ConnectorError::InvalidDataFormat{field_name:"card_number"})
+                    .attach_printable("Failed to parse card number from vault data")?;
+                AxiaAccountData {
+                    account: Some(card_number),
+                    expdate: Some(expdate),
+                    cardholdername: None,
+                    token: None,
+                }
+            }
+            _ => Err(errors::ConnectorError::NotImplemented(
+                utils::get_unimplemented_payment_method_error_message("axia")
+            ))?
+        };
+        Ok(Self{
+            account_data
+        })
+    }
+}
+
+impl<F, T> TryFrom<ResponseRouterData<F, AxiaSetupMandateResponse, T, PaymentsResponseData>>
+for RouterData<F, T, PaymentsResponseData>
+{
+    type Error = error_stack::Report<errors::ConnectorError>;
+    fn try_from(
+        item: ResponseRouterData<F, AxiaSetupMandateResponse, T, PaymentsResponseData>,
+    ) -> Result<Self, Self::Error> {
+        let axia_payment_status = AxiaPaymentStatus(item.response.code,None);
+
+        let info_response = item.response;
+        let mandate_reference = Some(MandateReference {
+            connector_mandate_id: Some(info_response.token.clone()),
+            payment_method_id: None,
+            mandate_metadata: None,
+            connector_mandate_request_reference_id: None,
+        });
+        let status = common_enums::AttemptStatus::from(axia_payment_status);
+        Ok(Self {
+            status,
+            response: Ok(PaymentsResponseData::TransactionResponse {
+                resource_id: ResponseId::ConnectorTransactionId(info_response.token.clone()),
+                redirection_data: Box::new(None),
+                mandate_reference: Box::new(mandate_reference),
+                connector_metadata: None,
+                network_txn_id: None,
+                connector_response_reference_id: Some(info_response.token.clone()),
+                incremental_authorization_allowed: None,
+                charges: None,
+            }),
+            ..item.data
+        })
     }
 }
 
@@ -669,7 +753,7 @@ impl Default for PhardCode {
 
 
 impl TryFrom<&ConnectorCustomerRouterData> for CustomerRequest {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(item: &ConnectorCustomerRouterData) -> Result<Self, Self::Error> {
 
 
@@ -697,7 +781,7 @@ impl TryFrom<&ConnectorCustomerRouterData> for CustomerRequest {
 }
 
 impl TryFrom<(&PaymentsAuthorizeRouterData, StringMajorUnit)> for TransactionPurchaseRequest {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         (item, amount): (&PaymentsAuthorizeRouterData, StringMajorUnit)
     ) -> Result<Self, Self::Error> {
@@ -708,11 +792,28 @@ impl TryFrom<(&PaymentsAuthorizeRouterData, StringMajorUnit)> for TransactionPur
             PaymentMethodData::VaultDataCard(vaultcard) => {
                 Some(AxiaPaymentMethodData::try_from((item,vaultcard.deref()))?)
             }
+            PaymentMethodData::MandatePayment => {
+                let connector_mandate_id = item.request.connector_mandate_id().ok_or(
+                    errors::ConnectorError::MissingRequiredField {
+                        field_name: "connector_mandate_id",
+                    },
+                )?;
+
+                Some(AxiaPaymentMethodData::Card(AxiaCardData {
+                    verification: None,
+                    account_data: Some(AxiaAccountData {
+                        account: None,
+                        expdate: None,
+                        cardholdername: None,
+                        token: Some(Secret::new(connector_mandate_id)),
+                    })
+                }))
+            }
             _ => None,
         };
         if payment_data.is_none() {
             return Err(
-                ConnectorError::NotImplemented(get_unimplemented_payment_method_error_message(
+                errors::ConnectorError::NotImplemented(utils::get_unimplemented_payment_method_error_message(
                     "axia",
                 )).into());
         }
@@ -752,14 +853,14 @@ pub struct AxiaAuthType {
 }
 
 impl TryFrom<&ConnectorAuthType> for AxiaAuthType {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(auth_type: &ConnectorAuthType) -> Result<Self, Self::Error> {
         match auth_type {
             ConnectorAuthType::BodyKey { api_key, key1 } => Ok(Self {
                 api_key: api_key.to_owned(),
                 key1: key1.to_owned(),
             }),
-            _ => Err(ConnectorError::FailedToObtainAuthType.into()),
+            _ => Err(errors::ConnectorError::FailedToObtainAuthType.into()),
         }
     }
 }
@@ -776,6 +877,9 @@ impl From<AxiaPaymentStatus> for common_enums::AttemptStatus {
                     _ => Self::Failure
                 }
             }
+            (Code::Auth,None)=>{
+                Self::Charged
+            }
             (_, _) => Self::Failure
         }
     }
@@ -785,14 +889,14 @@ impl From<AxiaPaymentStatus> for common_enums::AttemptStatus {
 impl<F, T> TryFrom<ResponseRouterData<F, TransactionResponse, T, PaymentsResponseData>>
 for RouterData<F, T, PaymentsResponseData>
 {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         item: ResponseRouterData<F, TransactionResponse, T, PaymentsResponseData>,
     ) -> Result<Self, Self::Error> {
         let axia_payment_status = AxiaPaymentStatus(item.response.code, item.response.phard_code);
         let status = common_enums::AttemptStatus::from(axia_payment_status);
 
-        let response = if is_payment_failure(status) {
+        let response = if utils::is_payment_failure(status) {
             *get_axia_payments_response_data(
                 &item.response,
                 item.http_code,
@@ -823,7 +927,7 @@ for RouterData<F, T, PaymentsResponseData>
 impl<F, T> TryFrom<ResponseRouterData<F, AxiaCustomerResponse, T, PaymentsResponseData>>
 for RouterData<F, T, PaymentsResponseData>
 {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         item: ResponseRouterData<F, AxiaCustomerResponse, T, PaymentsResponseData>,
     ) -> Result<Self, Self::Error> {
@@ -848,7 +952,7 @@ pub struct RefundRequest {
 }
 
 impl<F> TryFrom<(&RefundsRouterData<F>, StringMajorUnit)> for RefundRequest {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         (item, refund_amount): (&RefundsRouterData<F>, StringMajorUnit)
     ) -> Result<Self, Self::Error> {
@@ -890,7 +994,7 @@ impl From<AxiaRefundStatus> for enums::RefundStatus {
 
 
 impl TryFrom<RefundsResponseRouterData<RSync, TransactionResponse>> for RefundsRouterData<RSync> {
-    type Error = error_stack::Report<ConnectorError>;
+    type Error = error_stack::Report<errors::ConnectorError>;
     fn try_from(
         item: RefundsResponseRouterData<RSync, TransactionResponse>,
     ) -> Result<Self, Self::Error> {
@@ -904,7 +1008,7 @@ impl TryFrom<RefundsResponseRouterData<RSync, TransactionResponse>> for RefundsR
         };
         let axia_refund_status = AxiaRefundStatus(item.response.code,item.response.phard_code);
         let refund_status = enums::RefundStatus::from(axia_refund_status);
-        let response = if is_refund_failure(refund_status) {
+        let response = if utils::is_refund_failure(refund_status) {
             Err(hyperswitch_domain_models::router_data::ErrorResponse {
                 code,
                 message: item.response.verbiage.clone().unwrap_or_else(|| consts::NO_ERROR_MESSAGE.to_string()),

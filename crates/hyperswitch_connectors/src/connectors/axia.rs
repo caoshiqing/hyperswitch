@@ -28,23 +28,35 @@ use hyperswitch_domain_models::{
         ConnectorInfo, PaymentsResponseData, RefundsResponseData, SupportedPaymentMethods,SupportedPaymentMethodsExt
     },
     types::{
-        PaymentsAuthorizeRouterData, PaymentsCaptureRouterData, PaymentsSyncRouterData,
-        RefundSyncRouterData, RefundsRouterData,ConnectorCustomerRouterData,PaymentsCancelRouterData
+        PaymentsAuthorizeRouterData, PaymentsCaptureRouterData, PaymentsSyncRouterData, SetupMandateRouterData,
+        RefundSyncRouterData, RefundsRouterData, ConnectorCustomerRouterData, PaymentsCancelRouterData
     },
 };
 use hyperswitch_domain_models::payments::payment_attempt::PaymentAttempt;
 use hyperswitch_domain_models::router_response_types::PaymentMethodDetails;
-use hyperswitch_interfaces::{api::{
-    self, ConnectorCommon, ConnectorCommonExt, ConnectorIntegration, ConnectorSpecifications,
-    ConnectorValidation,
-}, configs::Connectors, errors::ConnectorError, events::connector_api_logs::ConnectorEvent, types::{self, Response}, webhooks};
+use hyperswitch_interfaces::{
+    api::{
+        self, ConnectorCommon, ConnectorCommonExt, ConnectorIntegration, ConnectorSpecifications,
+        ConnectorValidation,
+    },
+    configs::Connectors,errors,events::connector_api_logs::ConnectorEvent,
+    types::{self, Response}, webhooks
+};
 use hyperswitch_interfaces::api::CurrencyUnit;
 use hyperswitch_interfaces::consts::{NO_ERROR_CODE, NO_ERROR_MESSAGE};
-use hyperswitch_interfaces::types::{ConnectorCustomerType, PaymentsVoidType, RefundSyncType};
+use hyperswitch_interfaces::types::{ConnectorCustomerType, PaymentsVoidType, RefundSyncType, SetupMandateType};
 use masking::{ExposeInterface, Mask, Maskable};
 use transformers as axia;
 
-use crate::{constants::headers, types::ResponseRouterData, utils};
+use crate::{
+    constants::headers,
+    types::{
+        ResponseRouterData
+    },
+    utils::{
+        self as connector_utils,PaymentMethodDataType
+    }
+};
 use crate::constants::headers::CONTENT_TYPE;
 
 #[derive(Clone)]
@@ -87,7 +99,7 @@ where
         &self,
         req: &RouterData<Flow, Request, Response>,
         _connectors: &Connectors,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         let mut header = vec![(
             CONTENT_TYPE.to_string(),
             self.get_content_type().to_string().into(),
@@ -118,9 +130,9 @@ impl ConnectorCommon for Axia {
     fn get_auth_header(
         &self,
         auth_type: &ConnectorAuthType,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         let auth = axia::AxiaAuthType::try_from(auth_type)
-            .change_context(ConnectorError::FailedToObtainAuthType)?;
+            .change_context(errors::ConnectorError::FailedToObtainAuthType)?;
         Ok(vec![
             (
                 headers::X_API_KEY_ID.to_string(),
@@ -137,11 +149,11 @@ impl ConnectorCommon for Axia {
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         let response: axia::ErrorResponse = res
             .response
             .parse_struct("ErrorResponse")
-            .change_context(ConnectorError::ResponseDeserializationFailed)?;
+            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
 
         event_builder.map(|i| i.set_response_body(&response));
         router_env::logger::info!(connector_response=?response);
@@ -169,16 +181,13 @@ impl ConnectorCommon for Axia {
 impl ConnectorValidation for Axia {
     fn validate_mandate_payment(
         &self,
-        _pm_type: Option<PaymentMethodType>,
+        pm_type: Option<PaymentMethodType>,
         pm_data: PaymentMethodData,
-    ) -> CustomResult<(), ConnectorError> {
-        match pm_data {
-            PaymentMethodData::Card(_) => Err(ConnectorError::NotImplemented(
-                "validate_mandate_payment does not support cards".to_string(),
-            )
-            .into()),
-            _ => Ok(()),
-        }
+    ) -> CustomResult<(), errors::ConnectorError> {
+        let mandate_supported_pmd = std::collections::HashSet::from([
+            PaymentMethodDataType::Card,
+        ]);
+        connector_utils::is_mandate_supported(pm_data,pm_type,mandate_supported_pmd,self.id())
     }
 
     fn validate_psync_reference_id(
@@ -187,7 +196,7 @@ impl ConnectorValidation for Axia {
         _is_three_ds: bool,
         _status: enums::AttemptStatus,
         _connector_meta_data: Option<common_utils::pii::SecretSerdeValue>,
-    ) -> CustomResult<(), ConnectorError> {
+    ) -> CustomResult<(), errors::ConnectorError> {
         Ok(())
     }
 }
@@ -201,7 +210,7 @@ for Axia
     fn get_headers(&self,
                    req: &ConnectorCustomerRouterData,
                    _connectors: &Connectors
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         let mut header = vec![(
             CONTENT_TYPE.to_string(),
             ConnectorCustomerType::get_content_type(self)
@@ -221,14 +230,14 @@ for Axia
     fn get_url(&self,
                _req: &ConnectorCustomerRouterData,
                connectors: &Connectors
-    ) -> CustomResult<String, ConnectorError> {
+    ) -> CustomResult<String, errors::ConnectorError> {
         Ok(format!("{}{}", self.base_url(connectors), "api/v2/customer"))
     }
 
     fn get_request_body(&self,
                         req: &ConnectorCustomerRouterData,
                         _connectors: &Connectors
-    ) -> CustomResult<RequestContent, ConnectorError> {
+    ) -> CustomResult<RequestContent, errors::ConnectorError> {
         let connector_req = axia::CustomerRequest::try_from(req)?;
         Ok(RequestContent::Json(Box::new(connector_req)))
     }
@@ -236,7 +245,7 @@ for Axia
     fn build_request(&self,
                      req: &ConnectorCustomerRouterData,
                      connectors: &Connectors
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         Ok(Some(
             RequestBuilder::new()
                 .method(Method::Post)
@@ -252,14 +261,14 @@ for Axia
                        data: &ConnectorCustomerRouterData,
                        event_builder: Option<&mut ConnectorEvent>,
                        res: Response
-    ) -> CustomResult<ConnectorCustomerRouterData, ConnectorError>
+    ) -> CustomResult<ConnectorCustomerRouterData, errors::ConnectorError>
     where
         PaymentsResponseData: Clone,
     {
         let response: axia::AxiaCustomerResponse = res
             .response
             .parse_struct("AxiaCustomerResponse")
-            .change_context(ConnectorError::ResponseDeserializationFailed)?;
+            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
 
         event_builder.map(|i| i.set_response_body(&response));
         RouterData::try_from(ResponseRouterData {
@@ -267,14 +276,14 @@ for Axia
             data: data.clone(),
             http_code: res.status_code,
         })
-            .change_context(ConnectorError::ResponseHandlingFailed)
+            .change_context(errors::ConnectorError::ResponseHandlingFailed)
     }
 
     fn get_error_response(
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res,event_builder)
     }
 }
@@ -284,7 +293,80 @@ impl ConnectorIntegration<Session, PaymentsSessionData, PaymentsResponseData> fo
 
 impl ConnectorIntegration<AccessTokenAuth, AccessTokenRequestData, AccessToken> for Axia {}
 
-impl ConnectorIntegration<SetupMandate, SetupMandateRequestData, PaymentsResponseData> for Axia {}
+impl ConnectorIntegration<SetupMandate, SetupMandateRequestData, PaymentsResponseData> for Axia {
+    fn get_headers(
+        &self,
+        req: &RouterData<SetupMandate, SetupMandateRequestData, PaymentsResponseData>,
+        connectors: &Connectors
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
+        self.build_headers(req, connectors)
+    }
+
+    fn get_content_type(&self) -> &'static str {
+        self.common_get_content_type()
+    }
+
+    fn get_url(
+        &self,
+        _req: &RouterData<SetupMandate, SetupMandateRequestData, PaymentsResponseData>,
+        connectors: &Connectors
+    ) -> CustomResult<String, errors::ConnectorError> {
+        Ok(format!("{}api/v2/vault/account",self.base_url(connectors)))
+    }
+
+    fn get_request_body(
+        &self,
+        req: &SetupMandateRouterData,
+        _connectors: &Connectors,
+    ) -> CustomResult<RequestContent, errors::ConnectorError> {
+        let connector_req = axia::AxiaZeroMandateRequest::try_from(req)?;
+        Ok(RequestContent::Json(Box::new(connector_req)))
+    }
+
+    fn build_request(
+        &self,
+        req: &SetupMandateRouterData,
+        connectors: &Connectors,
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
+        Ok(Some(
+            RequestBuilder::new()
+                .method(Method::Post)
+                .url(&SetupMandateType::get_url(self, req, connectors)?)
+                .attach_default_headers()
+                .headers(SetupMandateType::get_headers(self, req, connectors)?)
+                .set_body(SetupMandateType::get_request_body(self, req, connectors)?)
+                .build(),
+        ))
+    }
+
+    fn handle_response(
+        &self,
+        data: &SetupMandateRouterData,
+        event_builder: Option<&mut ConnectorEvent>,
+        res: Response,
+    ) -> CustomResult<SetupMandateRouterData, errors::ConnectorError> {
+        let response: axia::AxiaSetupMandateResponse = res
+            .response
+            .parse_struct("AxiaSetupMandateResponse")
+            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
+        event_builder.map(|i| i.set_response_body(&response));
+        router_env::logger::info!(connector_response=?response);
+        RouterData::try_from(ResponseRouterData{
+            response,
+            data: data.clone(),
+            http_code: res.status_code
+        })
+    }
+
+    fn get_error_response(
+        &self,
+        res: Response,
+        event_builder: Option<&mut ConnectorEvent>
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
+        self.build_error_response(res,event_builder)
+    }
+}
+
 
 #[async_trait::async_trait]
 impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData> for Axia {
@@ -292,7 +374,7 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         &self,
         req: &PaymentsAuthorizeRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         self.build_headers(req, connectors)
     }
 
@@ -304,7 +386,7 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         &self,
         _req: &PaymentsAuthorizeRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<String, ConnectorError> {
+    ) -> CustomResult<String, errors::ConnectorError> {
         Ok(format!("{}{}",self.base_url(connectors),"api/v2/transaction/purchase"))
     }
 
@@ -312,8 +394,8 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         &self,
         req: &PaymentsAuthorizeRouterData,
         _connectors: &Connectors,
-    ) -> CustomResult<RequestContent, ConnectorError> {
-        let amount = utils::convert_amount(
+    ) -> CustomResult<RequestContent, errors::ConnectorError> {
+        let amount = connector_utils::convert_amount(
             self.amount_converter,
             req.request.minor_amount,
             req.request.currency,
@@ -327,7 +409,7 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         &self,
         req: &PaymentsAuthorizeRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         Ok(Some(
             RequestBuilder::new()
                 .method(Method::Post)
@@ -346,11 +428,11 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         data: &PaymentsAuthorizeRouterData,
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
-    ) -> CustomResult<PaymentsAuthorizeRouterData, ConnectorError> {
+    ) -> CustomResult<PaymentsAuthorizeRouterData, errors::ConnectorError> {
         let response: axia::TransactionResponse = res
             .response
             .parse_struct("TransactionResponse")
-            .change_context(ConnectorError::ResponseDeserializationFailed)?;
+            .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
         event_builder.map(|i| i.set_response_body(&response));
         router_env::logger::info!(connector_response=?response);
         RouterData::try_from(ResponseRouterData {
@@ -364,7 +446,7 @@ impl ConnectorIntegration<Authorize, PaymentsAuthorizeData, PaymentsResponseData
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res, event_builder)
     }
 }
@@ -374,7 +456,7 @@ impl ConnectorIntegration<PSync, PaymentsSyncData, PaymentsResponseData> for Axi
         &self,
         req: &PaymentsSyncRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         self.build_headers(req, connectors)
     }
 
@@ -386,15 +468,15 @@ impl ConnectorIntegration<PSync, PaymentsSyncData, PaymentsResponseData> for Axi
         &self,
         _req: &PaymentsSyncRouterData,
         _connectors: &Connectors,
-    ) -> CustomResult<String, ConnectorError> {
-        Err(ConnectorError::NotImplemented("get_url method".to_string()).into())
+    ) -> CustomResult<String, errors::ConnectorError> {
+        Err(errors::ConnectorError::NotImplemented("get_url method".to_string()).into())
     }
 
     fn build_request(
         &self,
         req: &PaymentsSyncRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         Ok(Some(
             RequestBuilder::new()
                 .method(Method::Get)
@@ -410,7 +492,7 @@ impl ConnectorIntegration<PSync, PaymentsSyncData, PaymentsResponseData> for Axi
         _data: &PaymentsSyncRouterData,
         _event_builder: Option<&mut ConnectorEvent>,
         _res: Response,
-    ) -> CustomResult<PaymentsSyncRouterData, ConnectorError> {
+    ) -> CustomResult<PaymentsSyncRouterData, errors::ConnectorError> {
        todo!()
     }
 
@@ -418,7 +500,7 @@ impl ConnectorIntegration<PSync, PaymentsSyncData, PaymentsResponseData> for Axi
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res, event_builder)
     }
 }
@@ -428,7 +510,7 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         &self,
         req: &PaymentsCaptureRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         self.build_headers(req, connectors)
     }
 
@@ -440,23 +522,23 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         &self,
         _req: &PaymentsCaptureRouterData,
         _connectors: &Connectors,
-    ) -> CustomResult<String, ConnectorError> {
-        Err(ConnectorError::NotImplemented("get_url method".to_string()).into())
+    ) -> CustomResult<String, errors::ConnectorError> {
+        Err(errors::ConnectorError::NotImplemented("get_url method".to_string()).into())
     }
 
     fn get_request_body(
         &self,
         _req: &PaymentsCaptureRouterData,
         _connectors: &Connectors,
-    ) -> CustomResult<RequestContent, ConnectorError> {
-        Err(ConnectorError::NotImplemented("get_request_body method".to_string()).into())
+    ) -> CustomResult<RequestContent, errors::ConnectorError> {
+        Err(errors::ConnectorError::NotImplemented("get_request_body method".to_string()).into())
     }
 
     fn build_request(
         &self,
         req: &PaymentsCaptureRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         Ok(Some(
             RequestBuilder::new()
                 .method(Method::Post)
@@ -477,7 +559,7 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         _data: &PaymentsCaptureRouterData,
         _event_builder: Option<&mut ConnectorEvent>,
         _res: Response,
-    ) -> CustomResult<PaymentsCaptureRouterData, ConnectorError> {
+    ) -> CustomResult<PaymentsCaptureRouterData, errors::ConnectorError> {
       todo!()
     }
 
@@ -485,7 +567,7 @@ impl ConnectorIntegration<Capture, PaymentsCaptureData, PaymentsResponseData> fo
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res, event_builder)
     }
 }
@@ -495,7 +577,7 @@ impl ConnectorIntegration<Void, PaymentsCancelData, PaymentsResponseData> for Ax
         &self,
         req: &PaymentsCancelRouterData,
         connectors: &Connectors
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         self.build_headers(req, connectors)
     }
 
@@ -507,7 +589,7 @@ impl ConnectorIntegration<Void, PaymentsCancelData, PaymentsResponseData> for Ax
         &self,
         req: &PaymentsCancelRouterData,
         connectors: &Connectors,
-    ) -> CustomResult<String, ConnectorError> {
+    ) -> CustomResult<String, errors::ConnectorError> {
         Ok(format!("{}api/v2/transaction/{}/void", self.base_url(connectors), req.request.connector_transaction_id))
     }
 
@@ -515,7 +597,7 @@ impl ConnectorIntegration<Void, PaymentsCancelData, PaymentsResponseData> for Ax
         &self,
         req: &PaymentsCancelRouterData,
         connectors: &Connectors
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         let request = RequestBuilder::new()
             .method(Method::Delete)
             .url(&PaymentsVoidType::get_url(self, req, connectors)?)
@@ -531,11 +613,11 @@ impl ConnectorIntegration<Void, PaymentsCancelData, PaymentsResponseData> for Ax
         data: &PaymentsCancelRouterData,
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
-    ) -> CustomResult<PaymentsCancelRouterData, ConnectorError> {
+    ) -> CustomResult<PaymentsCancelRouterData, errors::ConnectorError> {
         let response: axia::TransactionResponse =
             res.response
                 .parse_struct("axia TransactionResponse")
-                .change_context(ConnectorError::ResponseDeserializationFailed)?;
+                .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
         event_builder.map(|i| i.set_response_body(&response));
         router_env::logger::info!(connector_response=?response);
         RouterData::try_from(ResponseRouterData {
@@ -549,7 +631,7 @@ impl ConnectorIntegration<Void, PaymentsCancelData, PaymentsResponseData> for Ax
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res, event_builder)
     }
 }
@@ -560,7 +642,7 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
         &self,
         req: &RefundsRouterData<RSync>,
         connectors: &Connectors,
-    ) -> CustomResult<Vec<(String, Maskable<String>)>, ConnectorError> {
+    ) -> CustomResult<Vec<(String, Maskable<String>)>, errors::ConnectorError> {
         self.build_headers(req, connectors)
     }
 
@@ -572,7 +654,7 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
         &self,
         req: &RefundsRouterData<RSync>,
         connectors: &Connectors,
-    ) -> CustomResult<String, ConnectorError> {
+    ) -> CustomResult<String, errors::ConnectorError> {
         let ttid = req.request.connector_transaction_id.clone();
         Ok(format!("{}api/v2/transaction/{}/refund",self.base_url(connectors),ttid))
     }
@@ -581,7 +663,7 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
         &self,
         req: &RefundsRouterData<RSync>,
         connectors: &Connectors,
-    ) -> CustomResult<Option<Request>, ConnectorError> {
+    ) -> CustomResult<Option<Request>, errors::ConnectorError> {
         Ok(Some(
             RequestBuilder::new()
                 .method(Method::Post)
@@ -598,8 +680,8 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
     fn get_request_body(&self,
                         req: &RefundsRouterData<RSync>,
                         _connectors: &Connectors
-    ) -> CustomResult<RequestContent, ConnectorError> {
-        let refund_amount = utils::convert_amount(
+    ) -> CustomResult<RequestContent, errors::ConnectorError> {
+        let refund_amount = connector_utils::convert_amount(
             self.amount_converter,
             req.request.minor_refund_amount,
             req.request.currency,
@@ -616,11 +698,11 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
         data: &RefundsRouterData<RSync>,
         event_builder: Option<&mut ConnectorEvent>,
         res: Response,
-    ) -> CustomResult<RefundSyncRouterData, ConnectorError> {
+    ) -> CustomResult<RefundSyncRouterData, errors::ConnectorError> {
         let response: axia::TransactionResponse =
             res.response
                 .parse_struct("axia TransactionResponse")
-                .change_context(ConnectorError::ResponseDeserializationFailed)?;
+                .change_context(errors::ConnectorError::ResponseDeserializationFailed)?;
         event_builder.map(|i| i.set_response_body(&response));
         router_env::logger::info!(connector_response=?response);
         RouterData::try_from(ResponseRouterData {
@@ -634,7 +716,7 @@ impl ConnectorIntegration<RSync, RefundsData, RefundsResponseData> for Axia {
         &self,
         res: Response,
         event_builder: Option<&mut ConnectorEvent>,
-    ) -> CustomResult<ErrorResponse, ConnectorError> {
+    ) -> CustomResult<ErrorResponse, errors::ConnectorError> {
         self.build_error_response(res, event_builder)
     }
 }
@@ -648,22 +730,22 @@ impl webhooks::IncomingWebhook for Axia {
     fn get_webhook_object_reference_id(
         &self,
         _request: &webhooks::IncomingWebhookRequestDetails<'_>,
-    ) -> CustomResult<api_models::webhooks::ObjectReferenceId, ConnectorError> {
-        Err(report!(ConnectorError::WebhooksNotImplemented))
+    ) -> CustomResult<api_models::webhooks::ObjectReferenceId, errors::ConnectorError> {
+        Err(report!(errors::ConnectorError::WebhooksNotImplemented))
     }
 
     fn get_webhook_event_type(
         &self,
         _request: &webhooks::IncomingWebhookRequestDetails<'_>,
-    ) -> CustomResult<api_models::webhooks::IncomingWebhookEvent, ConnectorError> {
-        Err(report!(ConnectorError::WebhooksNotImplemented))
+    ) -> CustomResult<api_models::webhooks::IncomingWebhookEvent, errors::ConnectorError> {
+        Err(report!(errors::ConnectorError::WebhooksNotImplemented))
     }
 
     fn get_webhook_resource_object(
         &self,
         _request: &webhooks::IncomingWebhookRequestDetails<'_>,
-    ) -> CustomResult<Box<dyn masking::ErasedMaskSerialize>, ConnectorError> {
-        Err(report!(ConnectorError::WebhooksNotImplemented))
+    ) -> CustomResult<Box<dyn masking::ErasedMaskSerialize>, errors::ConnectorError> {
+        Err(report!(errors::ConnectorError::WebhooksNotImplemented))
     }
 }
 
