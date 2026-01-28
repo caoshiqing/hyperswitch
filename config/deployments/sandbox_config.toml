@@ -77,7 +77,7 @@ username = "mail.service@item.com"
 password = "T#9mKxL2$vQp7@R"
 port = 587 # SMTP port
 timeout = 10 # Timeout for SMTP connection in seconds
-connection = "starttls" #currently plaintext and starttls are supported
+connection = "start_tls" #currently plaintext and starttls are supported
 
 
 # Configuration for aws ses, applicable when the active email client is SES
