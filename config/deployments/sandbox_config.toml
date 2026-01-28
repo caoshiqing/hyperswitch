@@ -58,7 +58,7 @@ merchant_ids_send_payment_id_as_connector_request_id = []
 
 [cors]
 max_age = 30                            # Maximum time (in seconds) for which this CORS request may be cached.
-origins = ["https://47.117.71.7:9000"]        # List of origins that are allowed to make requests.
+origins = "https://47.117.71.7:9000"        # List of origins that are allowed to make requests.
 allowed_methods = "GET,POST,PUT,DELETE" # List of methods that are allowed
 wildcard_origin = false                 # If true, allows any origin to make requests
 
