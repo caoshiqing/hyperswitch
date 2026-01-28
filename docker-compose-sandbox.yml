@@ -7,7 +7,7 @@ volumes:
 services:
   ### Application services
   hyperswitch-server:
-    image: hyperswitch-router:20260104
+    image: hyperswitch-router:20260127
     pull_policy: missing
     command: /local/bin/router --config-path /local/config/deployments/sandbox_release.toml
     networks:
