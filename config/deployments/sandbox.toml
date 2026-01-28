@@ -205,7 +205,7 @@ slack_invite_url = "https://join.slack.com/t/hyperswitch-io/shared_invite/zt-2aw
 password_validity_in_days = 90
 two_factor_auth_expiry_in_secs = 300
 totp_issuer_name = "Hyperswitch Sandbox"
-base_url = "http://192.168.30.127:9000"
+base_url = "https://47.117.71.7:9000"
 force_two_factor_auth = false
 force_cookies = false
 
