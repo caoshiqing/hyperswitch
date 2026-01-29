@@ -32,8 +32,8 @@ Use the following base URLs when making requests to the APIs:
 
 | Environment | Base URL                       |
 | ----------- | ------------------------------ |
-| Sandbox     | https://sandbox.hyperswitch.io |
-| Production  | https://api.hyperswitch.io     |
+| Sandbox     | https://47.117.71.7:8080 |
+| Production  | https://xxx.xxx.xxxx     |
 
 <Note>
   If you **do not hold a PCI certification** to collect and store card data on your servers, we recommend using [**Unified Checkout**](https://hyperswitch.io/docs/sdkIntegrations/unifiedCheckoutWeb/#unified-checkout) to accept card information from users.
@@ -49,7 +49,7 @@ Hyperswitch authenticates your API requests using your account’s API keys. Eac
 | Publishable key      | `pk_snd_3b3***` | Used to authenticate API requests from your app’s client. Can be publicly-accessible in your web or mobile app’s client-side code.       |
 
 <Check>
-  Get your [API key](https://app.hyperswitch.io/developers?tabIndex=1) and [Publishable Key](https://app.hyperswitch.io/home)
+  Get your [API key](https://47.117.71.7:9000/developers?tabIndex=1) and [Publishable Key](https://47.117.71.7:9000/home)
 </Check>
 
 <Check>
@@ -87,7 +87,7 @@ Hyperswitch handles the complex functionality of a comprehensive payments flow t
 
 This is what a url looks like after redirection
 
-`https://app.hyperswitch.io?status=succeeded&payment_intent_client_secret=pay_NCv9vc19f8aa75OpFxH8_secret_V4zAc7V0C8WAw6FECMKM&amount=10000&manual_retry_allowed=false&signature=4fae0cfa775e4551db9356563d4b98b55662fe3c1c945fe215d90ccf3541282c535909ae901d82174d6b1e46ba1684aa0aa4c8861be0e2a9ef6f950a975d5014&signature_algorithm=HMAC-SHA512`
+`https://xxx.xxxxx.xxxx?status=succeeded&payment_intent_client_secret=pay_NCv9vc19f8aa75OpFxH8_secret_V4zAc7V0C8WAw6FECMKM&amount=10000&manual_retry_allowed=false&signature=4fae0cfa775e4551db9356563d4b98b55662fe3c1c945fe215d90ccf3541282c535909ae901d82174d6b1e46ba1684aa0aa4c8861be0e2a9ef6f950a975d5014&signature_algorithm=HMAC-SHA512`
 
 The available parameters are as follows:
 
