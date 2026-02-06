@@ -174,19 +174,22 @@ where
     OErr: ResponseError + error_stack::Context + Serialize,
     errors::ApiErrorResponse: ErrorSwitch<OErr>,
 {
+    //从请求头获取x-request-id的值，如果没有自动生成一个uuid
     let request_id = RequestId::extract(request)
         .await
         .attach_printable("Unable to extract request id from request")
         .change_context(errors::ApiErrorResponse::InternalServerError.switch())?;
-
+    //获取AppState对象
     let mut app_state = state.get_ref().clone();
 
     let start_instant = Instant::now();
+    // 对传入的对象payload进行序列化，Secret字段会脱敏
     let serialized_request = masking::masked_serialize(&payload)
         .attach_printable("Failed to serialize json request")
         .change_context(errors::ApiErrorResponse::InternalServerError.switch())?;
-
+    // 调用实现了ApiEventMetric Trait的payload的实例方法get_api_event_type
     let mut event_type = payload.get_api_event_type();
+    // 是否启用了多租户，默认是不启用的，默认租户public
     let tenant_id = if !state.conf.multitenancy.enabled {
         common_utils::id_type::TenantId::try_from_string(DEFAULT_TENANT.to_owned())
             .attach_printable("Unable to get default tenant id")
@@ -219,7 +222,9 @@ where
                 .switch(),
             )?
     };
+    // 从请求头获取 ACCEPT_LANGUAGE 的值，如果没有默认为en
     let locale = utils::get_locale_from_header(&incoming_request_header.clone());
+    // 创建SessionState实例
     let mut session_state =
         Arc::new(app_state.clone()).get_session_state(&tenant_id, Some(locale), || {
             errors::ApiErrorResponse::InvalidTenant {
@@ -239,7 +244,7 @@ where
         "tenant_id".to_string(),
         tenant_id.get_string_repr().to_string(),
     ));
-
+    //执行请求验证
     // Currently auth failures are not recorded as API events
     let (auth_out, auth_type) = api_auth
         .authenticate_and_fetch(request.headers(), &session_state)
@@ -247,7 +252,7 @@ where
         .switch()?;
 
     request_state.event_context.record_info(auth_type.clone());
-
+    //验证成功后获取merchant_id
     let merchant_id = auth_type
         .get_merchant_id()
         .cloned()
@@ -372,7 +377,9 @@ where
     ApplicationResponse<Q>: Debug,
     E: ErrorSwitch<api_models::errors::types::ApiErrorResponse> + error_stack::Context,
 {
+    // 请求方式
     let request_method = request.method().as_str();
+    // url路径
     let url_path = request.path();
 
     let unmasked_incoming_header_keys = state.conf().unmasked_headers.keys;

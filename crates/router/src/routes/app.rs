@@ -420,19 +420,37 @@ impl AppState {
         shut_down_signal: oneshot::Sender<()>,
         api_client: Box<dyn crate::services::ApiClient>,
     ) -> Self {
+        // 获取秘钥管理的客户端
         #[allow(clippy::expect_used)]
         let secret_management_client = conf
             .secrets_management
             .get_secret_management_client()
             .await
             .expect("Failed to create secret management client");
-
+        // 通过秘钥管理的客户端，解密配置文件中的加密秘钥，返回明文秘钥
+        // conf.master_database 的 password
+        // conf.analytics 仅对 sqlx 的 password 进行处理，clickhouse没有
+        // conf.replica_database 的 password
+        // conf.secrets [master_enc_key、admin_api_key、jwt_secret]
+        // conf.forex_api  费率转换相关
+        // conf.jwekey 和card vault有关
+        // conf.api_keys.hash_key hash存储apikey
+        // conf.connector_onboarding 连接器入住
+        // conf.applepay_decrypt_keys applepay支付相关
+        // conf.paze_decrypt_keys 数字钱包
+        // conf.applepay_merchant_configs applepay支付相关
+        // conf.payment_method_auth 银行账户验证
+        // conf.key_manager  秘钥管理相关配置
+        // conf.user_auth_methods SSO认证相关
+        // conf.network_tokenization_service
+        // conf.chat AI服务配置
+        // conf.superposition 配置管理中心
         let conf = Box::pin(secrets_transformers::fetch_raw_secrets(
             conf,
             &*secret_management_client,
         ))
         .await;
-
+        //加密管理客户端
         #[allow(clippy::expect_used)]
         let encryption_client = conf
             .encryption_management
@@ -442,6 +460,13 @@ impl AppState {
 
         Box::pin(async move {
             let testable = storage_impl == StorageImpl::PostgresqlTest;
+            //事件处理器，返回的类型和conf.events配置有关
+            // #[allow(clippy::large_enum_variant)]
+            // #[derive(Debug, Clone)]
+            // pub enum EventsHandler {
+            //     Kafka(KafkaProducer),
+            //     Logs(event_logger::EventLogger),
+            // }
             #[allow(clippy::expect_used)]
             let event_handler = conf
                 .events
@@ -449,6 +474,7 @@ impl AppState {
                 .await
                 .expect("Failed to create event handler");
 
+            // 通过conf.opensearch的配置，创建 OpenSearchClient 客户端
             #[allow(clippy::expect_used)]
             #[cfg(feature = "olap")]
             let opensearch_client = conf
@@ -457,11 +483,12 @@ impl AppState {
                 .await
                 .expect("Failed to initialize OpenSearch client.")
                 .map(Arc::new);
-
+            // 通过conf.redis创建RedisStore实例
             #[allow(clippy::expect_used)]
             let cache_store = get_cache_store(&conf.clone(), shut_down_signal, testable)
                 .await
                 .expect("Failed to create store");
+            // 根据conf.multitenancy.global_tenant 创建 GlobalStorageInterface 实现类为 KakfaStore
             let global_store: Box<dyn GlobalStorageInterface> = Self::get_store_interface(
                 &storage_impl,
                 &event_handler,
@@ -478,6 +505,7 @@ impl AppState {
                 .tenants
                 .get_pools_map(conf.analytics.get_inner())
                 .await;
+            // 返回配置租户和StorageInterface 的键值对，例如KafkaStore
             let stores = conf
                 .multitenancy
                 .tenants

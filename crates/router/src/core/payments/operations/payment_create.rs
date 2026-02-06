@@ -81,16 +81,19 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
     ) -> RouterResult<operations::GetTrackerResponse<'a, F, api::PaymentsRequest, PaymentData<F>>>
     {
         let db = &*state.store;
+        // 如果 customer_id 存在，则返回 ephemeral_key
         let ephemeral_key = Self::get_ephemeral_key(request, state, platform).await;
+        // 获取当前商户的id
         let merchant_id = platform.get_processor().get_account().get_id();
+        // 获取当前商户的数据处理架构 表 merchant_account 字段 storage_schema
         let storage_scheme = platform.get_processor().get_account().storage_scheme;
-
+        // 获取request的币种和金额
         let money @ (amount, currency) = payments_create_request_validation(request)?;
-
+        // payment_id
         let payment_id = payment_id
             .get_payment_intent_id()
             .change_context(errors::ApiErrorResponse::PaymentNotFound)?;
-
+        // 验证request的参数business_country和business_label 是否存在 merchant_account表的primary_business_details配置
         #[cfg(feature = "v1")]
         helpers::validate_business_details(
             request.business_country,

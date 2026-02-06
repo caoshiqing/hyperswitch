@@ -39,8 +39,10 @@ pub async fn payments_create(
     req: actix_web::HttpRequest,
     json_payload: web::Json<payment_types::PaymentsRequest>,
 ) -> impl Responder {
+    //枚举
     let flow = Flow::PaymentsCreate;
     let mut payload = json_payload.into_inner();
+    //参数校验
     if let Err(err) = payload
         .validate()
         .map_err(|message| errors::ApiErrorResponse::InvalidRequestData { message })
@@ -52,10 +54,11 @@ pub async fn payments_create(
         return http_not_implemented();
     };
 
+    //如果参数传递了payment_id，则直接使用，否则自动生成一个payment_id
     if let Err(err) = get_or_generate_payment_id(&mut payload) {
         return api::log_and_return_error_response(err);
     }
-
+    //将 headermap 转换为 HeaderPayload 结构体
     let header_payload = match HeaderPayload::foreign_try_from(req.headers()) {
         Ok(headers) => headers,
         Err(err) => {
@@ -76,8 +79,33 @@ pub async fn payments_create(
             .unwrap_or_default(),
     );
 
-    let locking_action = payload.get_locking_input(flow.clone());
+    // 1. payment_id 有值
+    // api_locking::LockAction::Hold {
+    //   input: api_locking::LockingInput {
+    //                     unique_locking_key: <payment_id>,
+    //                     api_identifier: lock_utils::ApiIdentifier::Payments,
+    //                     override_lock_retries: None,
+    //                 }
+    // }
+    // 2. customer_id 有值 且 payment_id 有值
+    // api_locking::LockAction::HoldMultiple {
+    //   vec!(api_locking::LockingInput {
+    //                     unique_locking_key: <payment_id>,
+    //                     api_identifier: lock_utils::ApiIdentifier::Payments,
+    //                     override_lock_retries: None,
+    //                 },
+    //api_locking::LockingInput {
+    //                     unique_locking_key: <customer_id>,
+    //                     api_identifier: lock_utils::ApiIdentifier::Payments,
+    //                     override_lock_retries: None,
+    //                 }
+    //   )
+    // }
+    // 3. 啥都没有
+    // api_locking::LockAction::NotApplicable
 
+    let locking_action = payload.get_locking_input(flow.clone());
+    // 返回实现了AuthenticateAndFetch Trait 的 &auth::InternalMerchantIdProfileIdAuth 实例
     let auth_type = match env::which() {
         env::Env::Production => {
             &auth::InternalMerchantIdProfileIdAuth(auth::HeaderAuth(auth::ApiKeyAuth {
