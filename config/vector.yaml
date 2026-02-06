@@ -82,6 +82,8 @@ transforms:
       - app_logs
     source: |-
       .message = parse_json!(.message)
+      del(.label)
+      del(.labels)
 
   sessionized_events_create_ts:
     type: remap
