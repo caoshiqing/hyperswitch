@@ -613,11 +613,12 @@ where
         .validate_request_with_state(state, &req, &mut payment_data, &business_profile)
         .await?;
 
+    // 验证授权层产生的profile_id，和 payment_intent 中的profile_id是否一致
     core_utils::validate_profile_id_from_auth_layer(
         profile_id_from_auth_layer,
         &payment_data.get_payment_intent().clone(),
     )?;
-
+    // 获取或创建customer
     let (operation, customer) = operation
         .to_domain()?
         // get_customer_details
@@ -632,6 +633,7 @@ where
         .to_not_found_response(errors::ApiErrorResponse::CustomerNotFound)
         .attach_printable("Failed while fetching/creating customer")?;
 
+    // 计算是否需要3ds
     let authentication_type =
         call_decision_manager(state, platform, &business_profile, &payment_data).await?;
 
@@ -660,6 +662,7 @@ where
 
     payment_method_token.map(|token| payment_data.set_payment_method_token(Some(token)));
 
+    // 借记卡路由
     let (connector, debit_routing_output) = debit_routing::perform_debit_routing(
         &operation,
         state,
@@ -674,6 +677,10 @@ where
         .apply_three_ds_authentication_strategy(state, &mut payment_data, &business_profile)
         .await?;
 
+    /* 是否应该添加任务到ProcessTracker
+     * 1.BankTransfer + stripe 会返回 false
+     * 2.其他都会返回 true
+     */
     let should_add_task_to_process_tracker = should_add_task_to_process_tracker(&payment_data);
 
     let locale = header_payload.locale.clone();
@@ -7991,10 +7998,12 @@ where
     D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
 {
     // On confirm is false and only router related
+    // 判断是否需要外部3DS认证
     let is_external_authentication_requested = payment_data
         .get_payment_intent()
         .request_external_three_ds_authentication;
     let payment_data =
+        // 当前操作不是confirm 或 支付需要外部3DS认证
         if !is_operation_confirm(operation) || is_external_authentication_requested == Some(true) {
             let (_operation, payment_method_data, pm_id) = operation
                 .to_domain()?
@@ -9027,6 +9036,9 @@ where
     F: Send + Clone,
     D: OperationSessionGetters<F> + OperationSessionSetters<F> + Send + Sync + Clone,
 {
+    // operation = PaymentCreate
+    // 1.如果请求中指定了request.routing，返回ConnectorChoice.StraightThrough
+    // 2.如果请求中没有指定request.routing，返回ConnectorChoice.Decide
     let connector_choice = operation
         .to_domain()?
         .get_connector(
@@ -9036,7 +9048,7 @@ where
             payment_data.get_payment_intent(),
         )
         .await?;
-
+    // should_call_connector 会根据不同的情况返回true或false, 是否应该调用connector
     let connector = if should_call_connector(operation, payment_data) {
         Some(match connector_choice {
             api::ConnectorChoice::SessionMultiple(connectors) => {
@@ -9052,6 +9064,7 @@ where
             }
 
             api::ConnectorChoice::StraightThrough(straight_through) => {
+                // 核心路由决策算法
                 connector_selection(
                     state,
                     platform,
@@ -10342,6 +10355,10 @@ pub fn is_network_token_with_network_transaction_id_flow(
     }
 }
 
+/* 是否应该添加任务到ProcessTracker
+ * 1.BankTransfer + stripe 会返回 false
+ * 2.其他都会返回 true
+ */
 pub fn should_add_task_to_process_tracker<F: Clone, D: OperationSessionGetters<F>>(
     payment_data: &D,
 ) -> bool {
@@ -10371,6 +10388,21 @@ where
     F: Clone,
     D: OperationSessionGetters<F> + OperationSessionSetters<F>,
 {
+    // 过滤connector,保留支持一下支付方式的connector
+    //// 支持 Session 路由的支付方式类型
+    // ROUTING_ENABLED_PAYMENT_METHOD_TYPES = {
+    //     GooglePay,
+    //     ApplePay,
+    //     Klarna,
+    //     Paypal,
+    //     SamsungPay,
+    // }
+    //// 支持 Session 路由的支付方式大类
+    // ROUTING_ENABLED_PAYMENT_METHODS = {
+    //     BankTransfer,
+    //     BankDebit,
+    //     BankRedirect,
+    // }
     let chosen = connectors.apply_filter_for_session_routing();
     let sfr = SessionFlowRoutingInput {
         state: &state,
@@ -10396,6 +10428,7 @@ where
 
     payment_data.set_routing_approach_in_attempt(routing_approach);
 
+    // 经过过滤，返回最终的connector列表
     let final_list = connectors.filter_and_validate_for_session_flow(&result)?;
 
     Ok(final_list)

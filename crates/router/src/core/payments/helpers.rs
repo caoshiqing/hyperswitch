@@ -452,6 +452,20 @@ pub async fn get_address_by_id(
     }
 }
 
+
+// 1.mandate_type=NewMandateTransaction，取请求参数payment_token、payment_method、payment_method_type
+// 2.mandate_type=RecurringMandateTransaction
+//  recurring_details有值
+//  a.recurring_details=NetworkTransactionIdAndCardDetails 取参数payment_method
+//  b.recurring_details=ProcessorPaymentToken
+//   b1.processor_payment_token.merchant_connector_id 有值，根据这个值查询merchant_connector，返回mandate_connector=(connector_name,merchant_connector_id),payment_method
+//   b2.processor_payment_token.merchant_connector_id 没有值，返回payment_method
+//  c.recurring_details=MandateId 暂时没用过
+//  d.recurring_details=PaymentMethodId 通过传递过来的payment_method_id查询表payment_methods，返回payment_method、payment_method_type、payment_method_info=表payment_methods的数据
+//  recurring_details没有值
+//  a.如果mandate_id有值，通过mandate_id查询mandate表的数据来构造返回值
+// 3.mandate_type=None
+// 使用方法传入的参数payment_method_id有值，构造返回值
 #[cfg(feature = "v1")]
 pub async fn get_token_pm_type_mandate_details(
     state: &SessionState,
@@ -5038,13 +5052,16 @@ pub async fn get_additional_payment_data(
     match pm_data {
         domain::PaymentMethodData::Card(card_data) => {
             //todo!
+            // 6位card bin
             let card_isin = Some(card_data.card_number.get_card_isin());
+            //从configs表中获取是否启用扩展card bin
             let enable_extended_bin =db
             .find_config_by_key_unwrap_or(
                 format!("{}_enable_extended_card_bin", profile_id.get_string_repr()).as_str(),
              Some("false".to_string()))
             .await.map_err(|err| services::logger::error!(message="Failed to fetch the config", extended_card_bin_error=?err)).ok();
 
+            // 8位card bin
             let card_extended_bin = match enable_extended_bin {
                 Some(config) if config.config == "true" => {
                     Some(card_data.card_number.get_extended_card_bin())
@@ -5065,7 +5082,7 @@ pub async fn get_additional_payment_data(
                 .attach_printable(
                     "Card cobadge check failed due to an invalid card network regex",
                 )?;
-
+            // 从co_badged_card_data获取card_network、signature_network、is_regulated三个的值
             let (card_network, signature_network, is_regulated) = card_data
                 .co_badged_card_data
                 .as_ref()
@@ -5090,8 +5107,9 @@ pub async fn get_additional_payment_data(
                     logger::debug!("Card network is not cobadged");
                     (None, None, None)
                 });
-
+            // 获取卡号最后4位
             let last4 = Some(card_data.card_number.get_last4());
+            // 如果card_data以下这些字段有值，直接构建AdditionalCardInfo
             if card_data.card_issuer.is_some()
                 && card_network.is_some()
                 && card_data.card_type.is_some()
@@ -5119,6 +5137,7 @@ pub async fn get_additional_payment_data(
                     }),
                 )))
             } else {
+                // 通过card_isin查询数据表card_info，从而构建AdditionalCardInfo
                 let card_info = card_isin
                     .clone()
                     .async_and_then(|card_isin| async move {
@@ -5151,6 +5170,7 @@ pub async fn get_additional_payment_data(
                             },
                         ))
                     });
+                // 如果DB中没有查到降级为只有 last4 + isin
                 Ok(Some(card_info.unwrap_or_else(|| {
                     api_models::payments::AdditionalPaymentData::Card(Box::new(
                         api_models::payments::AdditionalCardInfo {

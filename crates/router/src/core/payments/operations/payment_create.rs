@@ -101,6 +101,8 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             platform,
         )?;
 
+        // 如果ProfileId没有提供，会通过profile_name=<business_country>_<business_label>来查询BusinessProfile表
+        // 如果ProfileId有值，通过ProfileId和MerchantId验证这个值是否正确
         // If profile id is not passed, get it from the business_country and business_label
         #[cfg(feature = "v1")]
         let profile_id = core_utils::get_profile_id_from_business_details(
@@ -123,6 +125,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
 
         // TODO: eliminate a redundant db call to fetch the business profile
         // Validate whether profile_id passed in request is valid and is linked to the merchant
+        // 通过 profile_id 和 merchant_id 查询 Profile
         let business_profile = if let Some(business_profile) =
             core_utils::validate_and_get_business_profile(
                 db,
@@ -134,6 +137,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         {
             business_profile
         } else {
+            // 没有查到的话，只用profile_id查询
             db.find_business_profile_by_profile_id(
                 platform.get_processor().get_key_store(),
                 &profile_id,
@@ -143,10 +147,19 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
                 id: profile_id.get_string_repr().to_owned(),
             })?
         };
+        // 客户许可信息
         let customer_acceptance = request.customer_acceptance.clone();
-
+        // 周期性付款的参数
         let recurring_details = request.recurring_details.clone();
-
+        // 1.NewMandateTransaction (我想保存这个支付方式以备将来使用)
+        //  a.setup_future_usage=OffSession 且 customer_acceptance有值
+        //  b.setup_future_usage=OffSession 且 mandate_data有值
+        // 2.RecurringMandateTransaction（使用已保存的支付方式进行扣款）
+        //  a.setup_future_usage=OffSession 且 payment_token有值
+        //  b.off_session=true
+        //  c.setup_future_usage=OffSession 且 payment_method=Wallet
+        // 3.参数都有值，返回错误
+        // 4.None
         let mandate_type = m_helpers::get_mandate_type(
             request.mandate_data.clone(),
             request.off_session,
@@ -159,6 +172,19 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             reason: "Expected one out of recurring_details and mandate_data but got both".into(),
         })?;
 
+        // 1.mandate_type=NewMandateTransaction，取请求参数payment_token、payment_method、payment_method_type
+        // 2.mandate_type=RecurringMandateTransaction
+        //  recurring_details有值
+        //  a.recurring_details=NetworkTransactionIdAndCardDetails 取参数payment_method
+        //  b.recurring_details=ProcessorPaymentToken
+        //   b1.processor_payment_token.merchant_connector_id 有值，根据这个值查询merchant_connector，返回mandate_connector=(connector_name,merchant_connector_id),payment_method
+        //   b2.processor_payment_token.merchant_connector_id 没有值，返回payment_method
+        //  c.recurring_details=MandateId 暂时没用过
+        //  d.recurring_details=PaymentMethodId 通过传递过来的payment_method_id查询表payment_methods，返回payment_method、payment_method_type、payment_method_info=表payment_methods的数据
+        //  recurring_details没有值
+        //  a.如果mandate_id有值，通过mandate_id查询mandate表的数据来构造返回值
+        // 3.mandate_type=None
+        // 使用方法传入的参数payment_method_id有值，构造返回值
         let m_helpers::MandateGenericData {
             token,
             payment_method,
@@ -177,6 +203,11 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         )
         .await?;
 
+        // request.allowed_payment_method_types有值,验证是否支持
+        // 验证规则
+        // 部分不支持：允许，只记录指标，不报错
+        // 全部不支持：拒绝，返回 IncorrectPaymentMethodConfiguration 错误
+        // 全部支持：通过验证
         helpers::validate_allowed_payment_method_types_request(
             state,
             &profile_id,
@@ -185,8 +216,9 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         )
         .await?;
 
+        // 从请求中提取customer数据
         let customer_details = helpers::get_customer_details_from_request(request);
-
+        // 创建shipping address
         let shipping_address = helpers::create_or_find_address_for_payment_by_request(
             state,
             request.shipping.as_ref(),
@@ -198,7 +230,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             platform.get_processor().get_account().storage_scheme,
         )
         .await?;
-
+        // 创建billing address
         let billing_address = helpers::create_or_find_address_for_payment_by_request(
             state,
             request.billing.as_ref(),
@@ -211,6 +243,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         )
         .await?;
 
+        // 创建支付方式关联的address
         let payment_method_billing_address =
             helpers::create_or_find_address_for_payment_by_request(
                 state,
@@ -227,6 +260,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             )
             .await?;
 
+        // 处理请求参数browser_info
         let browser_info = request
             .browser_info
             .clone()
@@ -245,7 +279,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         } else {
             payment_id.get_attempt_id(1)
         };
-
+        // 会话过期时间
         let session_expiry =
             common_utils::date_time::now().saturating_add(time::Duration::seconds(
                 request.session_expiry.map(i64::from).unwrap_or(
@@ -294,6 +328,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             _ => None,
         };
 
+        // 构建domain层的PaymentIntent
         let payment_intent_new = Self::make_payment_intent(
             state,
             &payment_id,
@@ -315,6 +350,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         )
         .await?;
 
+        // 构造PaymentAttempt以及AdditionalPaymentData
         let (payment_attempt_new, additional_payment_data) = Self::make_payment_attempt(
             &payment_id,
             merchant_id,
@@ -336,6 +372,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         )
         .await?;
 
+        // 向数据库插入PaymentIntent
         let payment_intent = db
             .insert_payment_intent(
                 payment_intent_new,
@@ -347,6 +384,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
                 payment_id: payment_id.clone(),
             })?;
 
+        // 订单详情中的金额合计是否等于支付意图上的金额
         if let Some(order_details) = &request.order_details {
             helpers::validate_order_details_amount(
                 order_details.to_owned(),
@@ -355,6 +393,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             )?;
         }
 
+        // 向数据库插入PaymentAttempt
         #[cfg(feature = "v1")]
         let mut payment_attempt = db
             .insert_payment_attempt(
@@ -375,8 +414,10 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
                 payment_id: payment_id.clone(),
             })?;
 
+        // 是否存在mandate_details
         let mandate_details_present = payment_attempt.mandate_details.is_some();
 
+        // 验证setup_future_usage
         helpers::validate_mandate_data_and_future_usage(
             request.setup_future_usage,
             mandate_details_present,
@@ -438,7 +479,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             })
             .await
             .transpose()?;
-
+        // 如果mandate_id为空，RecurringDetails::ProcessorPaymentToken 转换为 MandateIds
         let mandate_id = if mandate_id.is_none() {
             request
                 .recurring_details
@@ -466,12 +507,15 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         } else {
             mandate_id
         };
+
+        // 如果confirm=true，将切换到PaymentConfirm Operation
         let operation = payments::if_not_create_change_operation::<_, F>(
             payment_intent.status,
             request.confirm,
             self,
         );
 
+        // 获取连接器的凭证，并将临时凭证写入到redis
         let creds_identifier = request
             .merchant_connector_details
             .as_ref()
@@ -497,6 +541,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             payments::types::SurchargeDetails::from((&request_surcharge_details, &payment_attempt))
         });
 
+        // 将additional_payment_data和请求中的 payment_method_data 数据进行合并
         let payment_method_data_after_card_bin_call = request
             .payment_method_data
             .as_ref()
@@ -513,6 +558,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Card cobadge check failed due to an invalid card network regex")?;
 
+        // 从已保存的支付方式中获取payment_method_data，如果没有保存的话返回none
         let additional_pm_data_from_locker = if let Some(ref pm) = payment_method_info {
             let card_detail_from_locker: Option<api::CardDetailFromLocker> = pm
                 .payment_method_data
@@ -540,6 +586,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
         } else {
             None
         };
+
         // Only set `payment_attempt.payment_method_data` if `additional_pm_data_from_locker` is not None
         if let Some(additional_pm_data) = additional_pm_data_from_locker.as_ref() {
             payment_attempt.payment_method_data = Some(
@@ -571,6 +618,7 @@ impl<F: Send + Clone + Sync> GetTracker<F, PaymentData<F>, api::PaymentsRequest>
             business_profile.use_billing_as_payment_method_billing,
         );
 
+        // 支付方式关联的账单地址
         let payment_method_data_billing = request
             .payment_method_data
             .as_ref()
@@ -1149,6 +1197,7 @@ impl PaymentCreate {
         PaymentAttempt,
         Option<api_models::payments::AdditionalPaymentData>,
     )> {
+        // 获取request.payment_method_data.payment_method_data
         let payment_method_data =
             request
                 .payment_method_data
@@ -1158,9 +1207,15 @@ impl PaymentCreate {
                 });
 
         let created_at @ modified_at @ last_synced = common_utils::date_time::now();
+        // 1.request.payment_method_data.payment_method_data 有值，confirm=true 返回：AttemptStatus::PaymentMethodAwaited
+        // 2.request.payment_method_data.payment_method_data 有值，confirm=false 返回：AttemptStatus::ConfirmationAwaited
+        // 3.request.payment_method_data.payment_method_data 没有值，返回：AttemptStatus::PaymentMethodAwaited
         let status = helpers::payment_attempt_status_fsm(payment_method_data, request.confirm);
+
+        // 提取金额和币种
         let (amount, currency) = (money.0, Some(money.1));
 
+        // 根据payment_method_data来构建AdditionalPaymentData
         let mut additional_pm_data = request
             .payment_method_data
             .as_ref()
@@ -1180,6 +1235,7 @@ impl PaymentCreate {
             .transpose()?
             .flatten();
 
+        // 从payment_method表中构造AddtionalPaymentMethodData
         if additional_pm_data.is_none() {
             // If recurring payment is made using payment_method_id, then fetch payment_method_data from retrieved payment_method object
             additional_pm_data = payment_method_info.as_ref().and_then(|pm_info| {
@@ -1251,12 +1307,15 @@ impl PaymentCreate {
             });
         };
 
+        // 从Option<AddtionalPaymentData>转换为Option<serde_json::Value>
         let additional_pm_data_value = additional_pm_data
             .as_ref()
             .map(Encode::encode_to_value)
             .transpose()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Failed to encode additional pm data")?;
+
+        // 生成attempt_id，使用payment_id 或者 pay_xx_1的格式
         let attempt_id = if core_utils::is_merchant_enabled_for_payment_id_as_connector_request_id(
             &state.conf,
             merchant_id,
@@ -1266,12 +1325,14 @@ impl PaymentCreate {
             payment_id.get_attempt_id(1)
         };
 
+        // 验证mandate_data，update_mandate_id 和 mandate_type 只能有一个参数
         if request.mandate_data.as_ref().is_some_and(|mandate_data| {
             mandate_data.update_mandate_id.is_some() && mandate_data.mandate_type.is_some()
         }) {
             Err(errors::ApiErrorResponse::InvalidRequestData {message:"Only one field out of 'mandate_type' and 'update_mandate_id' was expected, found both".to_string()})?
         }
 
+        // 通过参数request.mandate_data.update_mandate_id 构造 MandateDetails
         let mandate_data = if let Some(update_id) = request
             .mandate_data
             .as_ref()
@@ -1285,6 +1346,7 @@ impl PaymentCreate {
             None
         };
 
+        // 对payment_method_type进行修正
         let payment_method_type = Option::<enums::PaymentMethodType>::foreign_from((
             payment_method_type,
             additional_pm_data.as_ref(),
@@ -1329,6 +1391,7 @@ impl PaymentCreate {
             address_id => address_id,
         };
 
+        // recurring_details 或 payment_token 或 mandate_id 有值或request.is_stored_credential ，返回true
         let is_stored_credential = helpers::is_stored_credential(
             &request.recurring_details,
             &request.payment_token,
@@ -1454,6 +1517,9 @@ impl PaymentCreate {
     ) -> RouterResult<storage::PaymentIntent> {
         let created_at @ modified_at @ last_synced = common_utils::date_time::now();
 
+        // 1.request.payment_method_data.payment_method_data 有值 且 confirm=true 状态返回：IntentStatus::RequiresConfirmation
+        // 2.request.payment_method_data.payment_method_data 有值 且 confirm=false 状态返回：IntentStatus::RequiresPaymentMethod
+        // 3.request.payment_method_data.payment_method_data 没有值 状态返回：IntentStatus::RequiresPaymentMethod
         let status = helpers::payment_intent_status_fsm(
             request
                 .payment_method_data
@@ -1463,40 +1529,44 @@ impl PaymentCreate {
                 }),
             request.confirm,
         );
+        // 生成client_secret的值，<payment_id>_secret_<20位随机字符串>
         let client_secret = payment_id.generate_client_secret();
+        // 提取amount、currency
         let (amount, currency) = (money.0, Some(money.1));
-
+        // 处理request.order_details，将Option<Vec<OrderDetailsWithAmount>> 转换为 Option<Vec<pii::SecretSerdeValue>>
         let order_details = request
             .get_order_details_as_value()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Failed to convert order details to value")?;
-
+        // 处理request.allowed_payment_method_types，将Option<Vec<api_enums::PaymentMethodType>> 转换为 Option<serde_json::Value>
         let allowed_payment_method_types = request
             .get_allowed_payment_method_types_as_value()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Error converting allowed_payment_types to Value")?;
-
+        // 处理request.connector_metadata，将Option<ConnectorMetadata> 转换为 Option<serde_json::Value>
         let connector_metadata = request
             .get_connector_metadata_as_value()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Error converting connector_metadata to Value")?;
-
+        // 处理request.feature_metadata，将Option<FeatureMetadata> 转换为 Option<serde_json::Value>
         let feature_metadata = request
             .get_feature_metadata_as_value()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Error converting feature_metadata to Value")?;
-
+        // 获取payment_link_id
         let payment_link_id = payment_link_data.map(|pl_data| pl_data.payment_link_id);
 
+        // 增量授权的参数处理，不知道什么用处？
         let request_incremental_authorization =
             core_utils::get_request_incremental_authorization_value(
                 request.request_incremental_authorization,
                 request.capture_method,
             )?;
-
+        // 拆分支付
         let split_payments = request.split_payments.clone();
 
         // Derivation of directly supplied Customer data in our Payment Create Request
+        // request.customer_id 有值返回 None，没有值使用request.name或request.email或request.phone或request.phone_country_code来创建CustomerData
         let raw_customer_details = if request.customer_id.is_none()
             && (request.name.is_some()
                 || request.email.is_some()
@@ -1513,23 +1583,28 @@ impl PaymentCreate {
         } else {
             None
         };
+
+        // 如果 request.recurring_details 类型是 RecurringDetails::ProcessorPaymentToken，这个变量为true
         let is_payment_processor_token_flow = request.recurring_details.as_ref().and_then(
             |recurring_details| match recurring_details {
                 RecurringDetails::ProcessorPaymentToken(_) => Some(true),
                 _ => None,
             },
         );
-
+        // 获取商户秘钥
         let key = platform
             .get_processor()
             .get_key_store()
             .key
             .get_inner()
             .peek();
+
+        // Merchant类型的商户标识
         let identifier =
             Identifier::Merchant(platform.get_processor().get_key_store().merchant_id.clone());
+        // 从SessionState 构造出 KeyManagerState
         let key_manager_state: KeyManagerState = state.into();
-
+        // 处理request.shipping，从Address转换为Secret<serde_json::Value>
         let shipping_details_encoded = request
             .shipping
             .clone()
@@ -1538,6 +1613,7 @@ impl PaymentCreate {
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Unable to encode billing details to serde_json::Value")?;
 
+        // 处理request.billing，从Address转换为Secret<serde_json::Value>
         let billing_details_encoded = request
             .billing
             .clone()
@@ -1545,13 +1621,13 @@ impl PaymentCreate {
             .transpose()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Unable to encode billing details to serde_json::Value")?;
-
+        // raw_customer_details，从 CustomerData 转化为 Secret<serde_json::Value>
         let customer_details_encoded = raw_customer_details
             .map(|customer| Encode::encode_to_value(&customer).map(Secret::new))
             .transpose()
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Unable to encode shipping details to serde_json::Value")?;
-
+        // 个人信息加密，shipping、billing、customerdata
         let encrypted_data = domain::types::crypto_operation(
             &key_manager_state,
             type_name!(storage::PaymentIntent),
@@ -1572,12 +1648,15 @@ impl PaymentCreate {
         .change_context(errors::ApiErrorResponse::InternalServerError)
         .attach_printable("Unable to encrypt data")?;
 
+        // 返回DecryptedPaymentIntent类型，包含以上三个加密字段
         let encrypted_data = FromRequestEncryptablePaymentIntent::from_encryptable(encrypted_data)
             .change_context(errors::ApiErrorResponse::InternalServerError)
             .attach_printable("Unable to encrypt the payment intent data")?;
 
+        // 是否跳过外部税费计算
         let skip_external_tax_calculation = request.skip_external_tax_calculation;
 
+        // 订单税额
         let tax_details = request
             .order_tax_amount
             .map(|tax_amount| diesel_models::TaxDetails {
@@ -1586,6 +1665,7 @@ impl PaymentCreate {
                 }),
                 payment_method_type: None,
             });
+        // 是否强制触发3ds认证
         let force_3ds_challenge_trigger = request
             .force_3ds_challenge
             .unwrap_or(business_profile.force_3ds_challenge);

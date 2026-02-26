@@ -153,19 +153,22 @@ common_utils::create_list_wrapper!(
                 .cloned()
                 .collect()
         }
+        /*
+
+         */
         pub fn filter_and_validate_for_session_flow(self, routing_results: &FxHashMap<api_enums::PaymentMethodType, Vec<routing::SessionRoutingChoice>>) -> Result<Self, errors::ApiErrorResponse> {
             let mut final_list = Self::new(Vec::new());
             let routing_enabled_pmts = &consts::ROUTING_ENABLED_PAYMENT_METHOD_TYPES;
             for connector_data in self {
-                if !routing_enabled_pmts.contains(&connector_data.payment_method_sub_type) {
+                if !routing_enabled_pmts.contains(&connector_data.payment_method_sub_type) { // connector_data 支持的支付方式类型不再配置表，保留
                     final_list.push(connector_data);
-                } else if let Some(choice) = routing_results.get(&connector_data.payment_method_sub_type) {
+                } else if let Some(choice) = routing_results.get(&connector_data.payment_method_sub_type) { // connector_data 支持的支付方式类型存在于配置表，并且在路由结果里面
                     let routing_choice = choice
                         .first()
                         .ok_or(errors::ApiErrorResponse::InternalServerError)?;
                     if connector_data.connector.connector_name == routing_choice.connector.connector_name
                         && connector_data.connector.merchant_connector_id
-                            == routing_choice.connector.merchant_connector_id
+                            == routing_choice.connector.merchant_connector_id   // 与路由结果里面的connector名称和id相同的保留
                     {
                         final_list.push(connector_data);
                     }
