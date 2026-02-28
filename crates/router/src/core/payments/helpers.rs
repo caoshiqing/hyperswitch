@@ -2900,7 +2900,7 @@ pub async fn make_pm_data<'a, F: Clone, R, D>(
     use crate::core::payments::OperationSessionGetters;
 
     let request = payment_data.payment_method_data.clone();
-
+    // 从payment_method_data中获取CardToken的数据，否则返回CardToken::default
     let mut card_token_data = payment_data
         .payment_method_data
         .clone()
@@ -2909,7 +2909,7 @@ pub async fn make_pm_data<'a, F: Clone, R, D>(
             _ => None,
         })
         .or(Some(domain::CardToken::default()));
-
+    // 如果payment_data.card_cvc存在则设置CardToken的cvc
     if let Some(cvc) = payment_data.card_cvc.clone() {
         if let Some(token_data) = card_token_data.as_mut() {
             token_data.card_cvc = Some(cvc);
